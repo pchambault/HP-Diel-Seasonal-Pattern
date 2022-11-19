@@ -1,0 +1,947 @@
+---
+title: "HP 2012-2014: Seasonal and diel patterns (high resolution tags)"
+author: "Philippine Chambault"
+date: "2022-10-31"
+output:
+  bookdown::html_document2:
+    number_sections: yes
+    code_folding: show
+    df_print: default
+    fig_caption: yes
+    toc: yes
+    toc_float:
+      collapsed: yes
+      smooth_scroll: no
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(
+  echo      = TRUE,
+  fig.align = "center",
+  message = FALSE,
+  warning = FALSE,
+  # cache   = FALSE,
+  out.width = "100%"
+)
+```
+
+__Background__:
+Investigation of seasonal and diel patterns in the harbour porpoise dataset (high resolution tags).
+
+```{r, global_options, include=FALSE}
+library(tidyverse)
+library(tidyquant)
+library(gridExtra)
+library(viridis)
+library(DT)
+library(ggcorrplot)
+library(mgcv)
+# library(Rmisc)
+library(suncalc)
+```
+
+
+
+```{r, echo=F}
+setwd("/Users/philippinechambault/Documents/POST-DOC/2021/MSCA-GF/ANALYSES/HP")
+dive <- readRDS("./RDATA/1c.diveSummary_5HP_calib_5m_zoc0.RDS")
+dive = dive %>%
+  mutate(hour = as.numeric(substr(start, 12, 13)),
+         year = as.character(substr(start, 1, 4)),
+         month = as.character(substr(start, 6, 7)),
+         date = as.Date(substr(start, 1, 10)),
+         day_night = case_when(
+           period == "day"   ~ "day",
+           period == "dusk"  ~ "night",
+           period == "dawn"  ~ "night",
+           period == "night" ~ "night"))
+dive %>%
+  select(c(id,date,sunrise,sunset,period,year)) %>%
+  filter(year == "2014") %>%
+  summarise(latest_sunset = min(sunset),
+            earliest_sunset = max(sunset),
+            earliest_sunrise = min(sunrise),
+            latest_sunrise = max(sunrise),
+            ma_daylength = difftime(min(sunset),
+                                    min(sunrise), units="hours"),
+            min_daylength = difftime(max(sunset),
+                                     max(sunrise), units="hours"))
+```
+
+# Daylength over time {.tabset}
+## Dawn, Day, Dusk, Night
+
+```{r, echo=F}
+dataPlot = dive %>% 
+  group_by(id, date, hour) %>% 
+  summarise(period = unique(period),
+            .groups = "drop")
+
+dataPlot$date2 = as.Date(paste0("2022",substr(dataPlot$date,5,10)))
+dataPlot = dataPlot %>%
+  mutate(month = substr(date2, 6, 7)) %>%
+  filter(month!="01")
+```
+
+```{r, echo=FALSE, fig.pos="placeHere", fig.height=6, fig.cap="Evolution of the daylight according to the hour of the day and over time since departure."}
+ggplot(dataPlot, aes(x = date2, y = hour, fill = period)) +
+  geom_tile() +
+  facet_grid(id ~ .) +
+  scale_x_date(date_labels="%b",date_breaks  ="month") +
+  scale_y_continuous(labels=c("00:00","04:00","08:00",
+                              "12:00","16:00","20:00","23:00"),
+                     breaks=c(0,4,8,12,16,20,23)) +
+  scale_fill_manual(values = c("lightsalmon","navajowhite1","#337882","#301748")) +
+  theme_tq() +
+  labs(x = "Time", y = "Hour", fill = "") +
+  theme(legend.position = c("bottom"))
+```
+
+## Day vs. Night
+```{r, echo=F}
+dataPlot = dataPlot %>%
+  mutate(day_night = case_when(period == "day"   ~ "day",
+                               period == "dusk"  ~ "night",
+                               period == "dawn"  ~ "night",
+                               period == "night" ~ "night"))
+```
+
+```{r, echo=FALSE, fig.pos="placeHere", fig.height=6, fig.cap="Evolution of the daylight according to the hour of the day and over time since departure. Dawn was combined to night and dusk to day."}
+ggplot(dataPlot, aes(x = date2, y = hour, fill = day_night)) +
+  geom_tile() +
+  facet_grid(id ~ .) +
+  scale_y_continuous(labels=c("00:00","04:00","08:00",
+                              "12:00","16:00","20:00","23:00"),
+                     breaks=c(0,4,8,12,16,20,23)) +
+  scale_x_date(date_labels="%b",date_breaks  ="month") +
+  scale_fill_manual(values = c("navajowhite1","#301748")) +
+  theme_tq() +
+  labs(x = "Time", y = "Hour", fill = "Day/night") +
+  theme(legend.position = c("bottom"))
+```
+
+
+
+
+
+
+
+
+
+# Diel pattern over time {.tabset}
+## Median depth
+```{r, echo=F}
+dataPlot = dive %>%
+  group_by(id, date) %>%
+  summarise(sunrise = mean(sunrise),
+            sunset  = mean(sunset)) %>%
+  ungroup()
+
+sunrise = dataPlot %>%
+  mutate(hour  = as.numeric(substr(sunrise, 12, 13)),
+         month = substr(sunrise, 6, 7),
+         date  = as.Date(sunrise),
+         date2 = as.Date(paste0("2022",substr(sunrise,5,10)))) %>%
+  filter(month!="01") %>%
+  ungroup()
+
+sunset = dataPlot %>%
+  mutate(hour = as.numeric(substr(sunset, 12, 13)),
+         month = substr(sunrise, 6, 7),
+         date = as.Date(sunset),
+         date2 = as.Date(paste0("2022",substr(sunrise,5,10)))) %>%
+  filter(month!="01") %>%
+  ungroup()
+
+dataPlot2 = dive %>%
+  group_by(id, date, hour) %>%
+  summarise(depth = median(maxdep))
+
+dataPlot2$date2 = as.Date(paste0("2022",substr(dataPlot2$date,5,10)))
+dataPlot2 = dataPlot2 %>%
+  mutate(month = substr(date2, 6, 7)) %>%
+  filter(month!="01")
+```
+
+```{r, echo=FALSE, fig.pos="placeHere", fig.height=6, fig.cap="Evolution of the median depth according to the hour of the day and over time. Blue lines refer to start and end daytime."}
+ggplot(dataPlot2, aes(x = date2, y = hour)) +
+  geom_tile(aes(fill = depth)) +
+  scale_y_continuous(labels=c("00:00","04:00","08:00",
+                            "12:00","16:00","20:00"),
+                   breaks=c(0,4,8,12,16,20)) +
+  scale_fill_viridis_c(option = "magma", direction = -1) +
+  # scale_fill_viridis(direction = 1) +
+  facet_grid(id ~ .) +
+  theme(legend.position = c("bottom")) +
+  geom_point(data=sunrise, aes(x = date2, y = hour),
+             size=0.1, colour="blue") +
+  geom_point(data=sunset, aes(x = date2, y = hour),
+             size=0.1, colour="blue") +
+  theme_tq() +
+  labs(x = "", y = "Hour (UTC-2)", fill = "Median depth (m)")
+```
+Both diel and seasonal patterns can be observed on this graph. There is a trend towards deeper dives when approaching winter, but also a diel pattern with deeper dives during dark hours.
+
+## log(median depth)
+```{r, echo=FALSE, fig.pos="placeHere", fig.height=6, fig.cap="Evolution of the log(median depth) according to the hour of the day and over time."}
+ggplot(dataPlot2, aes(x = date2, y = hour)) +
+  geom_tile(aes(fill = log(depth))) +
+  scale_y_continuous(labels=c("00:00","04:00","08:00",
+                            "12:00","16:00","20:00"),
+                   breaks=c(0,4,8,12,16,20)) +
+  scale_fill_viridis_c(option = "magma", direction = -1) +
+  facet_grid(id ~ .) +
+  theme(legend.position = c("bottom")) +
+  geom_point(data=sunrise, aes(x = date2, y = hour),
+             size=0.1,colour="blue") +
+  geom_point(data=sunset, aes(x = date2, y = hour),
+             size=0.1, colour="blue") +
+  theme_tq() +
+  labs(x = "", y = "Hour (UTC-2)", fill = "log(median depth)")
+```
+
+## Median depth (depth>20 m)
+```{r, echo=FALSE, fig.pos="placeHere", fig.height=6, fig.cap="Evolution of the median depth according to the hour of the day and over time for dives> 20 m."}
+ggplot(dataPlot2[dataPlot2$depth>20,], aes(x = date2, y = hour)) +
+  geom_tile(aes(fill = depth)) +
+  scale_y_continuous(labels=c("00:00","04:00","08:00",
+                            "12:00","16:00","20:00"),
+                   breaks=c(0,4,8,12,16,20)) +
+  geom_point(data=sunrise, aes(x = date2, y = hour),
+             size=0.1,colour="blue") +
+  geom_point(data=sunset, aes(x = date2, y = hour),
+             size=0.1, colour="blue") +
+  facet_grid(id ~ .) +
+  scale_fill_viridis_c(option = "magma", direction = -1) +
+  theme_tq() +
+  labs(x = "", y = "Hour (UTC-2)", fill = "Median depth (m)") +
+  theme(legend.position = c("bottom"))
+```
+
+
+## Mean depth
+```{r, echo=F}
+dataPlot2 = dive %>%
+  group_by(id, date, hour) %>%
+  summarise(depth = mean(maxdep))
+
+dataPlot2$date2 = as.Date(paste0("2022",substr(dataPlot2$date,5,10)))
+dataPlot2 = dataPlot2 %>%
+  mutate(month = substr(date2, 6, 7)) %>%
+  filter(month!="01")
+```
+
+```{r, echo=FALSE, fig.pos="placeHere", fig.height=6, fig.cap="Evolution of the mean depth according to the hour of the day and over time."}
+ggplot(dataPlot2, aes(x = date2, y = hour)) +
+  geom_tile(aes(fill = depth)) +
+  scale_y_continuous(labels=c("00:00","04:00","08:00",
+                            "12:00","16:00","20:00"),
+                   breaks=c(0,4,8,12,16,20)) +
+  geom_point(data=sunrise, aes(x = date2, y = hour),
+             size=0.1,colour="blue") +
+  geom_point(data=sunset, aes(x = date2, y = hour),
+             size=0.1, colour="blue") +
+  facet_grid(id ~ .) +
+  scale_fill_viridis_c(option = "magma", direction = -1) +
+  theme_tq() +
+  labs(x = "", y = "Hour (UTC-2)", fill = "Mean depth (m)") +
+  theme(legend.position = c("bottom"))
+```
+
+## Max depth
+```{r, echo=F}
+dataPlot2 = dive %>%
+  group_by(id, date, hour) %>%
+  summarise(depth = max(maxdep))
+
+dataPlot2$date2 = as.Date(paste0("2022",substr(dataPlot2$date,5,10)))
+dataPlot2 = dataPlot2 %>%
+  mutate(month = substr(date2, 6, 7)) %>%
+  filter(month!="01")
+```
+
+```{r, echo=FALSE, fig.pos="placeHere", fig.height=6, fig.cap="Evolution of the max depth according to the hour of the day and over time."}
+ggplot(dataPlot2, aes(x = date2, y = hour)) +
+  geom_tile(aes(fill = depth)) +
+  scale_y_continuous(labels=c("00:00","04:00","08:00",
+                            "12:00","16:00","20:00"),
+                   breaks=c(0,4,8,12,16,20)) +
+  geom_point(data=sunrise, aes(x = date2, y = hour),
+             size=0.1,colour="blue") +
+  geom_point(data=sunset, aes(x = date2, y = hour),
+             size=0.1, colour="blue") +
+  facet_grid(id ~ .) +
+  scale_fill_viridis_c(option = "magma", direction = -1) +
+  theme_tq() +
+  labs(x = "", y = "Hour (UTC-2)", fill = "Max depth (m)") +
+  theme(legend.position = c("bottom"))
+```
+
+
+
+
+
+
+
+# Relationship between depth and daylength {.tabset}
+
+## Daylength over time
+```{r, echo=F}
+daylight3 <- readRDS("./RDATA/4.daylight_HR.RDS") %>%
+  mutate(month = substr(date, 6, 7),
+         date2 = as.Date(paste0("2022",substr(date,5,10))))
+daylight3 = daylight3 %>% filter(month!="01")
+```
+
+```{r, echo=FALSE, fig.pos="placeHere", fig.height=5, fig.cap="Evolution of the daylength according to the hour of the day and over time."}
+ggplot(daylight3, aes(x = date2, y = daylight)) +
+  geom_point(aes(colour=id), size=0.2) +
+  facet_grid(id ~ .) +
+  scale_x_date(date_labels="%b",date_breaks  ="month") +
+  theme_tq() +
+  labs(x = "Time", y = "Daylength (hours)") +
+  theme(legend.position = c("none"))
+```
+
+## Daylength vs median depth
+```{r, echo=FALSE, fig.pos="placeHere", fig.height=5, fig.cap="Evolution of the daylength according to median depth."}
+ggplot(daylight3, aes(y = median_dep, x = daylight)) +
+  geom_point(aes(colour=id), size=0.2) +
+  # scale_y_continuous(trans = "reverse") +
+  # facet_grid(id ~ .) +
+  geom_smooth(method="gam", aes(colour=id),
+              lwd=0.5, se=F, show.legend = T) +
+  theme_tq() +
+  labs(y = "Median depth (m)", x = "Daylength (hours)") +
+  theme(legend.position = c("none"))
+```
+Median depth decreases with increasing daylight; deeper dives when shorter daylength (during fall and winter). All dives were included here (no cutoff) and then aggregated by id, date and period (day s. night, n=2025).
+
+## Daylength vs mean depth
+```{r, echo=FALSE, fig.pos="placeHere", fig.height=5, fig.cap="Evolution of the daylength according to mean depth."}
+ggplot(daylight3, aes(y = mean_dep, x = daylight)) +
+  geom_point(aes(colour=id), size=0.2) +
+  # facet_grid(id ~ .) +
+  geom_smooth(method="gam", aes(colour=id),
+              lwd=0.5, se=F, show.legend = T) +
+  theme_tq() +
+  labs(y = "Mean depth (m)", x = "Daylength (hours)") +
+  theme(legend.position = c("none"))
+```
+The relationship seems even more pronounced for mean depth.
+
+## Median depth over time
+```{r, echo=FALSE, fig.pos="placeHere", fig.height=4, fig.cap="Evolution of median depth over time."}
+ggplot(daylight3, aes(y = median_dep, x = date2)) +
+  geom_point(aes(colour=id), size=0.2) +
+  geom_smooth(method="gam", aes(colour=id),
+              lwd=0.5, se=F, show.legend = T) +
+  theme_tq() +
+  labs(y = "Median depth (m)", x = "") +
+  theme(legend.position = c("none"))
+```
+Median dives tend to be deeper over time, especially when approaching winter (when the daylength decreases). Might be either related to the prey distribution, not present in summer or that during summer they feed on a different prey distributed in shallower waters.
+
+## Mean depth over time
+```{r, echo=FALSE, fig.pos="placeHere", fig.height=4, fig.cap="Evolution of mean depth over time."}
+ggplot(daylight3, aes(y = mean_dep, x = date2)) +
+  geom_point(aes(colour=id), size=0.2) +
+  # facet_grid(id ~ .) +
+  geom_smooth(method="gam", aes(colour=id),
+              lwd=0.5, se=F, show.legend = T) +
+  theme_tq() +
+  labs(y = "Mean depth (m)", x = "") +
+  theme(legend.position = c("right"))
+```
+Obvious relationship between both variables and for all individuals when using mean depth (deeper dives over time).
+
+
+## Max depth over time
+```{r, echo=FALSE, fig.pos="placeHere", fig.height=4, fig.cap="Evolution of max depth over time."}
+ggplot(daylight3, aes(y = max_dep, x = date2)) +
+  geom_point(aes(colour=id), size=0.2) +
+  # facet_grid(id ~ .) +
+  geom_smooth(method="gam", aes(colour=id),
+              lwd=0.5, se=F, show.legend = T) +
+  theme_tq() +
+  labs(y = "Max depth (m)", x = "") +
+  theme(legend.position = c("right"))
+```
+Less clear when using max depth!
+
+
+
+
+
+
+
+
+# GAM {.tabset}
+
+## Pairwise correlations
+```{r, echo=F}
+cor_dat = daylight3 %>%
+  select(-c(id,date,date2,month))
+corr <- round(cor(cor_dat, use = "pairwise.complete.obs"), 1)
+corr[is.na(corr)] <- 0
+corr_p <- cor_pmat(cor_dat)
+corr_p[is.na(corr_p)] <- 1
+
+cor.test(cor_dat$mean_dep, cor_dat$daylight)
+cor.test(cor_dat$median_dep, cor_dat$daylight)
+cor.test(cor_dat$max_dep, cor_dat$daylight)
+```
+
+
+## Correlation matrix
+```{r, echo=FALSE, fig.pos="placeHere", fig.height=4, fig.cap="Pairwise correlations beteen numeric variables from summarized dataset."}
+ggcorrplot(
+  corr,
+  p.mat = corr_p,
+  hc.order = TRUE,
+  method = "circle",
+  type = "lower",
+  lab = TRUE,
+  sig.level = 0.05)
+```
+Higher correlation between _meandep_ and _daylight_ (-0.8) compared to _mediandep_ and _daylight_ (-0.7) or  _maxdep_ (-0.4).
+
+
+## Model summary
+```{r, echo=F}
+ind_pred <- readRDS("./RDATA/4.GAM/Indiv-GAM_HR_daylight_meandep_slope_intercept.rds")
+pop_pred <- readRDS("./RDATA/4.GAM/Pop-GAM_HR_daylight_meandep_slope_intercept.rds")
+m <- readRDS("./RDATA/4.GAM/GAM_HR_output_daylight_meandep_slope_intercept.rds")
+summary(m)
+```
+
+
+## Diagnostic plots
+```{r, echo=FALSE, fig.pos="placeHere", fig.height=4, fig.cap="Diagnostic plot of the gam relating mean depth and daylight (with ID as random effect)."}
+par(mfrow=c(2,2),mar=c(2,2,2,2))
+qq.gam(m,cex=1,pch=20, main="qqplot")
+hist(residuals(m), xlab="Residuals", main="Histogram of residuals")
+observed.y <- napredict(m$na.action, m$y)
+plot(fitted(m), observed.y, pch=20, xlab = "Fitted Values",
+     ylab = "Response", main = "Response vs. Fitted Values")
+acf(resid(m),lag.max=200, main="Autocorrelation")
+```
+Good fit with only 1 variable but some spatial autocorrelation.
+
+
+## Smooth curves (indiv)
+```{r, echo=FALSE, fig.pos="placeHere", fig.height=5, fig.cap="Individual smooth curves from the GAM relating the daylength (in hours) to the mean depth."}
+ggplot(ind_pred, aes(x = daylight, y = fit_ind)) +
+  geom_line(aes(colour=id),lwd=1) +
+  geom_ribbon(aes(ymin=fit_ind-se_ind,
+                  ymax=fit_ind+se_ind, fill=id), alpha=0.2) +
+  labs(y = "Mean depth (m)", x = "Daylength (hours)", title="") +
+  theme(legend.position = c(0.85,0.8),
+        legend.key.size = unit(6,"cm"),
+        legend.key.width = unit(0.5,"cm"),
+        legend.key.height = unit(0.5,"cm"),
+        legend.title = element_blank(),
+        legend.text = element_text(size=8),
+        legend.box.spacing = unit(0.1,'cm'),
+        legend.margin=margin(t=-0.0, unit='cm'),
+        legend.spacing.x = unit(0.1, 'cm'),
+        legend.key = element_blank(),
+        legend.background=element_rect(fill = NA),
+        axis.title = element_text(size=9, hjust=0.5),
+        panel.border = element_rect(colour="black",fill=NA,size=0.2),
+        axis.text.y  = element_text(size=8, hjust=1),
+        axis.text.x  = element_text(size=8, hjust=1),
+        panel.background = element_blank(),
+        panel.grid.major = element_blank()) +
+  guides(color = guide_legend(override.aes = list(lwd = 1) ) )
+```
+Dome relationship between the daylength and the mean depth, with deeper dives during shorter daylight (e.g. in fall and winter). The GAM performed very well with an explained deviance of 78% using only one variable (photoperiod). To investigate the role and occurrence of the deep dives, it'll be necessary to discard the first months of tracking (August and September?) as they were mainly associated with shallow dives, likely due to a longer photoperiod.
+
+
+## Smooth curves (pop)
+```{r, echo=FALSE, fig.pos="placeHere", fig.height=5, fig.cap="Population (thick line) + individual (thin lines) smooth curves from the GAM relating the daylength to the mean depth."}
+ggplot(pop_pred, aes(x = daylight, y = fit_pop)) +
+  geom_ribbon(aes(ymin=fit_pop-fit_pop_se,ymax=fit_pop+fit_pop_se),
+              alpha=0.3, fill="mediumseagreen") +
+  geom_line(colour="mediumseagreen",lwd=1) +
+  geom_line(data=ind_pred, aes(daylight, fit_ind, group=id),
+            colour="mediumseagreen", lwd=0.5, alpha=0.4) +
+  labs(y = "Mean depth (m)", x = "Daylength (hours)") +
+  theme(legend.position = c(0.85,0.8),
+        legend.key.size = unit(6,"cm"),
+        legend.key.width = unit(0.5,"cm"),
+        legend.key.height = unit(0.5,"cm"),
+        legend.title = element_blank(),
+        legend.text = element_text(size=8),
+        legend.box.spacing = unit(0.1,'cm'),
+        legend.margin=margin(t=-0.0, unit='cm'),
+        legend.spacing.x = unit(0.1, 'cm'),
+        legend.key = element_blank(),
+        legend.background=element_rect(fill = NA),
+        axis.title = element_text(size=9, hjust=0.5),
+        panel.border = element_rect(colour="black",fill=NA,size=0.2),
+        axis.text.y  = element_text(size=8, hjust=1),
+        axis.text.x  = element_text(size=8, hjust=1),
+        panel.background = element_blank(),
+        panel.grid.major = element_blank()) +
+  guides(color = guide_legend(override.aes = list(lwd = 1) ) )
+```
+
+
+
+
+# Diving capacities across month and period {.tabset}
+
+## Histo daily mean depth & period
+```{r, echo=FALSE}
+daily = dive %>%
+  group_by(id, date, period) %>%
+  summarise(
+    max_dep    = max(maxdep),
+    mean_dep   = mean(maxdep),
+    median_dep = median(maxdep),
+    .groups = "drop")  %>%
+  mutate(
+    month = format(date, "%b"),
+    day_night = case_when(
+      period == "day"   ~ "day",
+      period == "dusk"  ~ "night",
+      period == "dawn"  ~ "night",
+      period == "night" ~ "night"))
+
+daily$month = factor(daily$month,
+                     levels = c("Jul", "Aug", "Sep",
+                                "Oct", "Nov", "Dec", "Jan"))
+```
+
+
+```{r, echo=FALSE, fig.pos="placeHere", fig.height=4, fig.cap="Density plots of daily mean depth according to month and period of the day (night in blue, day in beige)."}
+ggplot(daily, aes(x=mean_dep, fill=day_night, colour=day_night)) +
+  geom_density(aes(y=..scaled..,alpha=.4)) +
+  coord_flip() +
+  scale_x_continuous(trans = "reverse") +
+  scale_y_continuous(breaks=c(0, 0.5, 1)) +
+  scale_fill_manual(values = c("navajowhite3","dodgerblue3")) +
+  scale_colour_manual(values = c("navajowhite3","dodgerblue3")) +
+  labs(y = "Dive probability", x = "Dive depth (m)",
+       title= "Daily mean depth", fill="") +
+  theme_tq() +
+  facet_grid(~month) +
+  theme(legend.position = "none",
+        axis.text  = element_text(size=8, hjust=0.5),
+        strip.text = element_text(colour='white',size=10,
+                                  margin=margin(0.1,0.1,0.1,0.1,"cm")))
+```
+
+## Histo daily median depth & period
+```{r, echo=FALSE, fig.pos="placeHere", fig.height=4, fig.cap="Density plots of daily max depth according to month and period of the day (night in blue, day in beige)."}
+ggplot(daily, aes(x=median_dep, fill=day_night, colour=day_night)) +
+  geom_density(aes(y=..scaled..,alpha=.4)) +
+  coord_flip() +
+  scale_x_continuous(trans = "reverse") +
+  scale_y_continuous(breaks=c(0, 0.5, 1)) +
+  scale_fill_manual(values = c("navajowhite3","dodgerblue3")) +
+  scale_colour_manual(values = c("navajowhite3","dodgerblue3")) +
+  labs(y = "Dive probability", x = "Dive depth (m)",
+       title= "Daily median depth", fill="") +
+  theme_tq() +
+  facet_grid(~month) +
+  theme(legend.position = "none",
+        axis.text  = element_text(size=8, hjust=0.5),
+        strip.text = element_text(colour='white',size=10,
+                                  margin=margin(0.1,0.1,0.1,0.1,"cm")))
+```
+
+
+## Histo daily max depth & period
+```{r, echo=FALSE, fig.pos="placeHere", fig.height=4, fig.cap="Density plots of daily max depth according to month and period of the day (night in blue, day in beige)."}
+ggplot(daily, aes(x=max_dep, fill=day_night, colour=day_night)) +
+  geom_density(aes(y=..scaled..,alpha=.4)) +
+  coord_flip() +
+  scale_x_continuous(trans = "reverse") +
+  scale_y_continuous(breaks=c(0, 0.5, 1)) +
+  scale_fill_manual(values = c("navajowhite3","dodgerblue3")) +
+  scale_colour_manual(values = c("navajowhite3","dodgerblue3")) +
+  labs(y = "Dive probability", x = "Dive depth (m)",
+       title= "Daily max depth", fill="") +
+  theme_tq() +
+  facet_grid(~month) +
+  theme(legend.position = "none",
+        axis.text  = element_text(size=8, hjust=0.5),
+        strip.text = element_text(colour='white',size=10,
+                                  margin=margin(0.1,0.1,0.1,0.1,"cm")))
+```
+
+
+## Histo max depth & period
+```{r, echo=FALSE, fig.pos="placeHere", fig.height=6, fig.cap="Density plots of max depth according to month and period of the day."}
+ggplot(dive, aes(x=maxdep, fill=period, colour=period)) +
+  geom_density(aes(y=..scaled..)) + #,alpha=.4
+  coord_flip() +
+  scale_x_continuous(trans = "reverse") +
+  scale_y_continuous(breaks=c(0, 0.5, 1)) +
+  scale_colour_manual(values = c("lightsalmon","navajowhite1",
+                                 "#337882","dodgerblue3")) +
+  scale_fill_manual(values = c("lightsalmon","navajowhite1",
+                               "#337882","dodgerblue3")) +
+  labs(y = "Density", x = "Dive depth (m)",
+       title = "Months",fill="") +
+  theme_tq() +
+  facet_grid(period~month) +
+  theme(legend.position = "none",
+        axis.text  = element_text(size=8, hjust=0.5),
+        strip.text = element_text(colour='white',size=10,
+                                  margin=margin(0.1,0.1,0.1,0.1,"cm")))
+```
+No bimodality and mainly shallow dives during summer (July to Sept). A pattern starts to be perceptible in October with deeper dives in dawn, dusk and night. Even larger proportion of deeper dives in November at dawn and night, but also some deep dives during daytime.
+
+
+## Boxplot max depth & period
+```{r, echo=FALSE, fig.pos="placeHere", fig.height=5, fig.cap="Boxplots of max depth across month and period of the day."}
+ggplot(dive, aes(y=maxdep, x=month)) +
+  geom_boxplot(outlier.shape = NA, aes(fill = period)) +
+  scale_y_continuous(trans = "reverse") +
+  scale_fill_manual(values = c("lightsalmon","navajowhite1",
+                                 "#337882","dodgerblue3")) +
+  labs(x="Month", y="Max depth (m)",
+       title ="Diel pattern from max depth", fill="") +
+  theme_tq() +
+  theme(legend.position = "right",
+        axis.text  = element_text(size=7, hjust=0.5),
+        strip.text = element_text(colour='white',size=10,
+                                  margin=margin(0.1,0.1,0.1,0.1,"cm")))
+```
+
+## Boxplot max depth & day_night
+```{r, echo=FALSE, fig.pos="placeHere", fig.height=5, fig.cap="Boxplots of max depth across month and day phase (day vs night)."}
+ggplot(dive, aes(y=maxdep, x=month)) +
+  geom_boxplot(outlier.shape = NA, aes(fill = day_night)) +
+  scale_y_continuous(trans = "reverse") +
+  scale_fill_manual(values = c("navajowhite3","dodgerblue3")) +
+  labs(x="Month", y="Max depth (m)",
+       title ="Diel pattern from max depth", fill="") +
+  theme_tq() +
+  theme(legend.position = "right",
+        axis.text  = element_text(size=7, hjust=0.5),
+        strip.text = element_text(colour='white',size=10,
+                                  margin=margin(0.1,0.1,0.1,0.1,"cm")))
+```
+
+
+## Histo mean depth & period
+```{r, echo=FALSE, fig.pos="placeHere", fig.height=6, fig.cap="Density plots of mean depth according to month and period of the day."}
+ggplot(dive, aes(x=meandep, fill=period, colour=period)) +
+  geom_density(aes(y=..scaled..)) + #,alpha=.4
+  coord_flip() +
+  scale_x_continuous(trans = "reverse") +
+  scale_y_continuous(breaks=c(0, 0.5, 1)) +
+  scale_colour_manual(values = c("lightsalmon","navajowhite1",
+                                 "#337882","dodgerblue3")) +
+  scale_fill_manual(values = c("lightsalmon","navajowhite1",
+                               "#337882","dodgerblue3")) +
+  labs(y = "Density", x = "Mean dive depth (m)",
+       title = "Months",fill="") +
+  theme_tq() +
+  facet_grid(period~month) +
+  theme(legend.position = "none",
+        axis.text  = element_text(size=8, hjust=0.5),
+        strip.text = element_text(colour='white',size=10,
+                                  margin=margin(0.1,0.1,0.1,0.1,"cm")))
+```
+
+## Histo mean depth & day_night
+```{r, echo=FALSE, fig.pos="placeHere", fig.height=6, fig.cap="Density plots of mean depth according to month and day phase."}
+ggplot(dive, aes(x=meandep, fill=day_night, colour=day_night)) +
+  geom_density(aes(y=..scaled..)) +
+  coord_flip() +
+  scale_x_continuous(trans = "reverse") +
+  scale_y_continuous(breaks=c(0, 0.5, 1)) +
+  scale_colour_manual(values = c("navajowhite3","dodgerblue3")) +
+  scale_fill_manual(values = c("navajowhite3","dodgerblue3")) +
+  labs(y = "Density", x = "Mean dive depth (m)",
+       title = "Months",fill="") +
+  theme_tq() +
+  facet_grid(day_night~month) +
+  theme(legend.position = "none",
+        axis.text  = element_text(size=8, hjust=0.5),
+        strip.text = element_text(colour='white',size=10,
+                                  margin=margin(0.1,0.1,0.1,0.1,"cm")))
+```
+
+## Boxplot mean depth & day_night
+```{r, echo=FALSE, fig.pos="placeHere", fig.height=5, fig.cap="Boxplots of mean depth across month and day phase (day vs night)."}
+ggplot(dive, aes(y=meandep, x=month)) +
+  geom_boxplot(outlier.shape = NA, aes(fill = day_night)) +
+  scale_y_continuous(trans = "reverse") +
+  scale_fill_manual(values = c("navajowhite3","dodgerblue3")) +
+  labs(x="Month", y="Mean depth (m)",
+       title ="Diel pattern from mean depth", fill="") +
+  theme_tq() +
+  theme(legend.position = "right",
+        axis.text  = element_text(size=7, hjust=0.5),
+        strip.text = element_text(colour='white',size=10,
+                                  margin=margin(0.1,0.1,0.1,0.1,"cm")))
+```
+
+
+
+## Boxplot dive duration & period
+```{r, echo=FALSE, fig.pos="placeHere", fig.height=5, fig.cap="Boxplots of dive duration across month and period of the day."}
+ggplot(dive, aes(y=dur/60, x=month)) +
+  geom_boxplot(outlier.shape = NA, aes(fill = period)) +
+  scale_fill_manual(values = c("lightsalmon","navajowhite1",
+                                 "#337882","dodgerblue3")) +
+  labs(x="Month", y="Dive duration (min)",
+       title ="Diel pattern from dive duration", fill="") +
+  theme_tq() +
+  theme(legend.position = "right",
+        axis.text  = element_text(size=7, hjust=0.5),
+        strip.text = element_text(colour='white',size=10,
+                                  margin=margin(0.1,0.1,0.1,0.1,"cm")))
+```
+
+
+## Boxplot dive duration & day_phase
+```{r, echo=FALSE, fig.pos="placeHere", fig.height=5, fig.cap="Boxplots of dive duration across month and day phase."}
+ggplot(dive, aes(y=dur/60, x=month)) +
+  geom_boxplot(outlier.shape = NA, aes(fill = day_night)) +
+  scale_fill_manual(values = c("navajowhite3","dodgerblue3")) + ##301748
+  labs(x="Month", y="Dive duration (min)",
+       title ="Diel pattern from dive duration", fill="") +
+  theme_tq() +
+  theme(legend.position = "right",
+        axis.text  = element_text(size=7, hjust=0.5),
+        strip.text = element_text(colour='white',size=10,
+                                  margin=margin(0.1,0.1,0.1,0.1,"cm")))
+```
+
+
+Some ideas to dig further: how the photoperiod can influence the foraging behaviour of this predator. Diel patterns, especially diel vertical migration are well known in planktonic species and being characterized by a vertical migration to shallower layers at night to access food and avoid predators, while targeting deeper layers during the day. But HP seem to do the opposite which is intriguing! It is called the "reverse migration".
+
+
+
+
+
+
+
+
+
+
+
+
+# Proportion of deep dives over time {.tabset}
+
+## Per ID
+```{r, echo=F}
+prop = dive %>%
+  dplyr::group_by(id, month) %>%
+  dplyr::summarize(ntot = max(dive),
+            dives0_20m   = n_distinct(dive[maxdep<=20]),
+            dives20_50m  = n_distinct(dive[maxdep>20 & maxdep<=50]),
+            dives50_100m = n_distinct(dive[maxdep>50 & maxdep<=100]),
+            dives_deep100m = n_distinct(dive[maxdep>100])) %>%
+  dplyr::ungroup()
+
+prop = prop %>%
+  mutate(dives0_20m     = (dives0_20m / ntot) * 100,
+         dives20_50m    = (dives20_50m / ntot) * 100,
+         dives50_100m   = (dives50_100m / ntot) * 100,
+         dives_deep100m = (dives_deep100m / ntot) * 100)
+
+pivot = prop %>%
+  pivot_longer(c(dives0_20m, dives20_50m,
+                 dives50_100m, dives_deep100m),
+               names_to = "depth_class", values_to = "prop") %>%
+  select(id,month,ntot,depth_class,prop) %>%
+  filter(month!="01")
+
+pivot = pivot %>%
+  mutate(class = case_when(depth_class == "dives0_20m" ~ "0-20 m",
+                           depth_class == "dives20_50m" ~ "20-50 m",
+                           depth_class == "dives50_100m" ~ "50-100 m",
+                           depth_class == "dives_deep100m" ~ "> 100 m"))
+
+pivot$class = factor(pivot$class,
+                     levels=c("0-20 m","20-50 m",
+                              "50-100 m", "> 100 m"))
+```
+
+```{r, echo=FALSE, fig.pos="placeHere", fig.height=3.5, fig.cap="Individual proportions of dives according to depth class across months."}
+ggplot(pivot, aes(y=prop, x=month)) +
+  geom_histogram(aes(fill=class), stat="identity",
+                 position="fill") +
+  facet_wrap(~id, ncol=5) +
+  scale_fill_brewer(palette = 1, direction = 1) +
+  labs(x = "Months", y = "Dive frequency (%)",fill = "") +
+  theme_tq() +
+  theme(axis.title = element_text(size=7, hjust=0.5),
+        # legend.position = "bottom",
+        axis.text  = element_text(size=6, hjust=0.5, angle=0),
+        axis.line.y.left = element_line(size=0.2),
+        axis.line.x.bottom = element_line(size=0.2),
+        panel.background = element_blank(),
+        panel.grid.major = element_blank(),
+        plot.margin = unit(c(0.6,0.3,0.4,0.6),"cm"))
+```
+
+
+
+## All IDs combined
+```{r, echo=F}
+prop = dive %>%
+  dplyr::group_by(month) %>%
+  dplyr::summarize(ntot = max(dive),
+            dives0_20m   = n_distinct(dive[maxdep<=20]),
+            dives20_50m  = n_distinct(dive[maxdep>20 & maxdep<=50]),
+            dives50_100m = n_distinct(dive[maxdep>50 & maxdep<=100]),
+            dives_deep100m = n_distinct(dive[maxdep>100])) %>%
+  dplyr::ungroup()
+
+prop = prop %>%
+  mutate(dives0_20m     = (dives0_20m / ntot) * 100,
+         dives20_50m    = (dives20_50m / ntot) * 100,
+         dives50_100m   = (dives50_100m / ntot) * 100,
+         dives_deep100m = (dives_deep100m / ntot) * 100)
+
+pivot = prop %>%
+  pivot_longer(c(dives0_20m, dives20_50m,
+                 dives50_100m, dives_deep100m),
+               names_to = "depth_class", values_to = "prop") %>%
+  select(month,ntot,depth_class,prop) %>%
+  filter(month!="01")
+
+pivot = pivot %>%
+  mutate(class = case_when(depth_class == "dives0_20m" ~ "0-20 m",
+                           depth_class == "dives20_50m" ~ "20-50 m",
+                           depth_class == "dives50_100m" ~ "50-100 m",
+                           depth_class == "dives_deep100m" ~ "> 100 m"))
+
+pivot$class = factor(pivot$class,
+                           levels=c("0-20 m","20-50 m",
+                                    "50-100 m", "> 100 m"))
+```
+
+```{r, echo=FALSE, fig.pos="placeHere", fig.height=5, fig.cap="Proportions of dives according to depth class across months."}
+ggplot(pivot, aes(y=prop, x=month)) +
+  geom_histogram(aes(fill=class), stat="identity",
+                 position="fill") +
+  scale_fill_brewer(palette = 1, direction = 1) +
+  labs(x = "Months", y = "Dive frequency (%)",fill = "") +
+  theme_tq() +
+  theme(axis.title = element_text(size=7, hjust=0.5),
+        axis.text  = element_text(size=6, hjust=0.5, angle=0),
+        axis.line.y.left = element_line(size=0.2),
+        axis.line.x.bottom = element_line(size=0.2),
+        panel.background = element_blank(),
+        panel.grid.major = element_blank(),
+        plot.margin = unit(c(0.6,0.3,0.4,0.6),"cm"))
+```
+
+
+
+
+
+
+
+
+
+
+
+# Hours after sunrise {.tabset}
+## Max depth (individually)
+```{r, echo=F}
+# dive$period = as.factor(dive$period)
+# dive = dive %>%
+#   mutate(date  = as.Date(start)) %>%
+#   ungroup()
+# sun  = getSunlightTimes(date = dive$date, tz="America/Nuuk",
+#                         lat = 65.2, lon = -52.9,
+#                         keep=c("sunrise","sunset")) %>%
+#   as_tibble() %>%
+#   select(sunrise, sunset)
+dive2 = dive %>%
+  as_tibble() %>%
+  mutate(hrs_aft_sunrise = as.numeric((start - sunrise) / 3600), # in hours
+         hrs_aft_sunrise_round = round(hrs_aft_sunrise),
+         day_night = case_when(hrs_aft_sunrise_round >= 0 ~ 'day',
+                               TRUE ~ "night"))
+```
+
+```{r, echo=FALSE, fig.pos="placeHere", fig.height=3.5, fig.cap="Max depth according to hours after sunrise. Deeper dives before sunrise for all individuals except 27262 (likely due to the very short tracking duration of 16 days)."}
+ggplot(dive2, aes(x=as.factor(hrs_aft_sunrise_round), y=maxdep)) +
+  geom_boxplot(outlier.shape = NA, aes(fill=day_night)) +
+  scale_fill_manual(values = c("navajowhite3","dodgerblue3")) +
+  labs(y = "Max depth (m)", x = "Hours after sunrise",
+       title= "", fill="") +
+  facet_wrap(~id, ncol = 5) +
+  scale_x_discrete(labels=c("-12","-8","-4","0","4","8","12","16"),
+                     breaks=c("-12","-8","-4","0","4","8","12","16")) +
+  scale_y_continuous(trans = "reverse") + #, limits=c(260, 0)
+  theme_tq()
+```
+
+## Max depth (all)
+```{r, echo=FALSE, fig.pos="placeHere", fig.height=5, fig.cap="Max depth according to hours after sunrise."}
+ggplot(dive2, aes(x=as.factor(hrs_aft_sunrise_round), y=maxdep)) +
+  geom_boxplot(outlier.shape = NA, aes(fill=day_night)) +
+  scale_fill_manual(values = c("navajowhite3","dodgerblue3")) +
+  labs(y = "Max depth (m)", x = "Hours after sunrise",
+       title= "", fill="") +
+  scale_x_discrete(labels=c("-12","-8","-4","0","4","8","12","16"),
+                     breaks=c("-12","-8","-4","0","4","8","12","16")) +
+  scale_y_continuous(trans = "reverse", limits=c(260, 0)) +
+  theme_tq()
+```
+
+## Dive duration
+```{r, echo=FALSE, fig.pos="placeHere", fig.height=5, fig.cap="Dive duration according to hours after sunrise. Longer dives before sunrise (median > 1 min at night)."}
+ggplot(dive2, aes(x=as.factor(hrs_aft_sunrise_round), y=dur/60)) +
+  geom_boxplot(outlier.shape = NA, aes(fill=day_night)) +
+  scale_fill_manual(values = c("navajowhite3","dodgerblue3")) +
+  labs(y = "Dive duration (min)", x = "Hours after sunrise",
+       title= "", fill="") +
+  scale_x_discrete(labels=c("-12","-8","-4","0","4","8","12","16"),
+                   breaks=c("-12","-8","-4","0","4","8","12","16")) +
+  ylim(0, 6.3) +
+  theme_tq()
+```
+
+
+## Ascent rate
+```{r, echo=FALSE, fig.pos="placeHere", fig.height=5, fig.cap="Ascent rate according to hours after sunrise. Faster ascent rate after sunrise (during daytime)."}
+ggplot(dive2, aes(x=as.factor(hrs_aft_sunrise_round), y=asc_rate)) +
+  geom_boxplot(outlier.shape = NA, aes(fill=day_night)) +
+  scale_fill_manual(values = c("navajowhite3","dodgerblue3")) +
+  labs(y = "Ascent rate (m/s)", x = "Hours after sunrise",
+       title= "", fill="") +
+  scale_x_discrete(labels=c("-12","-8","-4","0","4","8","12","16"),
+                   breaks=c("-12","-8","-4","0","4","8","12","16")) +
+  ylim(0, 0.8) +
+  theme_tq()
+```
+
+## Descent rate
+```{r, echo=FALSE, fig.pos="placeHere", fig.height=5, fig.cap="Descent rate according to hours after sunrise. Faster descent rate after sunrise (more active during daytime?)."}
+ggplot(dive2, aes(x=as.factor(hrs_aft_sunrise_round), y=des_rate)) +
+  geom_boxplot(outlier.shape = NA, aes(fill=day_night)) +
+  scale_fill_manual(values = c("navajowhite3","dodgerblue3")) +
+  labs(y = "Descent rate (m/s)", x = "Hours after sunrise",
+       title= "", fill="") +
+  scale_x_discrete(labels=c("-12","-8","-4","0","4","8","12","16"),
+                   breaks=c("-12","-8","-4","0","4","8","12","16")) +
+  ylim(0, 0.8) +
+  theme_tq()
+```
+
+## Bottom time
+```{r, echo=FALSE, fig.pos="placeHere", fig.height=5, fig.cap="Bottom time according to hours after sunrise. No clear trend for this variable."}
+ggplot(dive2, aes(x=as.factor(hrs_aft_sunrise_round), y=bot_dur)) +
+  geom_boxplot(outlier.shape = NA, aes(fill=day_night)) +
+  scale_fill_manual(values = c("navajowhite3","dodgerblue3")) +
+  labs(y = "Bottom time (sec)", x = "Hours after sunrise",
+       title= "", fill="") +
+    scale_x_discrete(labels=c("-12","-8","-4","0","4","8","12","16"),
+                   breaks=c("-12","-8","-4","0","4","8","12","16")) +
+  # ylim(0, 3) +
+  theme_tq()
+```
