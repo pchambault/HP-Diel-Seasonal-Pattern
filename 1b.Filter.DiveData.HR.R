@@ -541,6 +541,7 @@ saveRDS(dep_daily, "./RDATA/1b.dailyDepth_HR.RDS")
 # dive <- readRDS("./RDATA/1b.dive_5HP_calib_5m_zoc0.RDS")
 names(dive)
 
+system.time({  # 85 sec
 ndive_summary = dive %>%
   filter(dive != 0) %>%             # remove surface times
   group_by(dive, id) %>% 
@@ -548,6 +549,9 @@ ndive_summary = dive %>%
   summarise(start     = first(posix_local),
             end       = last(posix_local),
             dur       = n(),        # dive duration in sec
+            lon       = mean(lon),
+            lat       = mean(lat),
+            
             maxdep    = max(depth),
             mindep    = min(depth),
             meandep   = mean(depth),
@@ -566,13 +570,14 @@ ndive_summary = dive %>%
          des_rate = abs(diff_dep_des / des_dur),
          bot_rate = abs(diff_dep_bot / bot_dur)) %>%
   ungroup()
+})
 names(ndive_summary)    # 395 825 dives
 summary(ndive_summary)
 
 
 # save dataset
 #--------------
-setwd("/Users/philippinechambault/Documents/POST-DOC/2021/MSCA-GF/ANALYSES/HP")
+setwd("/Users/philippinechambault/Documents/POST-DOC/2021/MSCA-GF/ANALYSES/HP-Diel-Seasonal-Pattern")
 saveRDS(ndive_summary, paste0("./RDATA/1b.diveSummary_5HP_calib_",
                               threshold,"m_zoc",offset,".RDS"))
 

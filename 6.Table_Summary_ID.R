@@ -22,9 +22,10 @@ source("gt_functions_Jojo.R")
 #########################################
 # dive depth summary
 #########################################
+
 # depth: low resolution
 #------------------------
-dep_lr <- readRDS("./RDATA/1c.depth_Binned_LR_20ids.RDS") %>%
+dep_lr <- readRDS("./RDATA/1c.depth_Binned_LR_19ids.RDS") %>%
   mutate(date  = as.Date(posix_local),
          hour  = substr(posix_local, 12, 13),
          month = format(date, "%b")) %>%
@@ -38,8 +39,8 @@ unique(dep_lr$id)
 
 # depth: high resolution
 #-----------------------
-setwd("/Users/philippinechambault/Documents/POST-DOC/2021/MSCA-GF/ANALYSES/HP")
-dep_hr <- readRDS("./RDATA/1c.diveSummary_5HP_calib_5m_zoc0.RDS")  %>%
+setwd("/Users/philippinechambault/Documents/POST-DOC/2021/MSCA-GF/ANALYSES/HP-Diel-Seasonal-Pattern")
+dep_hr <- readRDS("./RDATA/1b.diveSummary_5HP_calib_5m_zoc0.RDS")  %>%
   mutate(date = as.Date(substr(start, 1, 10)),
          hour  = substr(start, 12, 13),
          month = format(date, "%b"),
@@ -63,12 +64,14 @@ dep$id[dep$id == "27262"]  = "27262*"
 
 
 
+
+
 #########################################
 # dive duration summary
 #########################################
 # dur: low resolution
 #------------------------
-dur_lr <- readRDS("./RDATA/1c.duration_Binned_LR_20ids.RDS") %>%
+dur_lr <- readRDS("./RDATA/1c.duration_Binned_LR_19ids.RDS") %>%
   mutate(date  = as.Date(posix_local),
          hour  = substr(posix_local, 12, 13),
          month = format(date, "%b")) %>%
@@ -83,8 +86,8 @@ unique(dur_lr$id)
 
 # dur: high resolution
 #-----------------------
-setwd("/Users/philippinechambault/Documents/POST-DOC/2021/MSCA-GF/ANALYSES/HP")
-dur_hr <- readRDS("./RDATA/1c.diveSummary_5HP_calib_5m_zoc0.RDS")  %>%
+setwd("/Users/philippinechambault/Documents/POST-DOC/2021/MSCA-GF/ANALYSES/HP-Diel-Seasonal-Pattern")
+dur_hr <- readRDS("./RDATA/1b.diveSummary_5HP_calib_5m_zoc0.RDS")  %>%
   mutate(date = as.Date(substr(start, 1, 10)),
          hour  = substr(start, 12, 13),
          month = format(date, "%b"),
@@ -98,7 +101,7 @@ names(dur_hr)
 names(dur_lr)
 
 dur = rbind(dur_lr, dur_hr)
-unique(dur$id) # 17 porpoises
+length(unique(dur$id)) # 17 porpoises
 dur$id[dur$id == "93100"]  = "93100*"
 dur$id[dur$id == "27262b"] = "27262b*"
 dur$id[dur$id == "22849b"] = "22849b*"
@@ -113,13 +116,13 @@ summary(dur)
 # monthly dives
 ####################
 monthly = dep %>%
-  dplyr::group_by(id, month) %>%
-  dplyr::summarize(ntot           = n(),
-                   dives0_20m     = n_distinct(maxdep<=20),
-                   dives20_50m    = n_distinct(maxdep>20 & maxdep<=50),
-                   dives50_100m   = n_distinct(maxdep>50 & maxdep<=100),
-                   dives_sup100m  = n_distinct(maxdep>100)) %>%
-  dplyr::ungroup()
+  group_by(id, month) %>%
+  summarize(ntot           = n(),
+            dives0_20m     = n_distinct(depth<=20),
+            dives20_50m    = n_distinct(depth>20 & depth<=50),
+            dives50_100m   = n_distinct(depth>50 & depth<=100),
+            dives_sup100m  = n_distinct(depth>100)) %>%
+  ungroup()
 monthly
 
 
@@ -129,13 +132,13 @@ monthly
 #############################
 # track summary / ID
 #############################
-loc <- readRDS("./RDATA/1.locations_filtered_17HP.rds") %>%
+loc <- readRDS("./RDATA/1a.locations_filtered_17HP.rds") %>%
   mutate(date  = as.Date(posix_local),
          hour  = substr(posix_local, 12, 13),
          month = format(date, "%b")) %>%
-  dplyr::select(c(id,date,hour,lon,lat,month))
+  select(c(id,date,hour,lon,lat,month))
 loc = loc[order(loc$date, loc$id),]
-unique(loc$id) # 17 porpoises
+length(unique(loc$id)) # 17 porpoises
 loc$id[loc$id == "93100"]  = "93100*"
 loc$id[loc$id == "27262b"] = "27262b*"
 loc$id[loc$id == "22849b"] = "22849b*"
@@ -147,7 +150,7 @@ loc$id[loc$id == "27262"]  = "27262*"
 #----------------
 sum_track = loc %>%
   group_by(id) %>%
-  dplyr::summarise(Start = first(date),
+  summarise(Start = first(date),
                    End   = last(date),
                    Duration = difftime(last(date), first(date), units = "days")) %>%
   arrange(Start) %>%
@@ -165,9 +168,9 @@ sum_track
 sum_dur = dur %>%
   filter(dur < 8) %>%
   group_by(id) %>%
-  dplyr::summarise(Dive_dur = paste0(signif(mean(dur),3),
-                                     "+",signif(sd(dur),3),
-                                     " (",signif(max(dur),3),")")) %>%
+  summarise(Dive_dur = paste0(signif(mean(dur),3),
+                              "+",signif(sd(dur),3),
+                              " (",signif(max(dur),3),")")) %>%
   ungroup()
 sum_dur
 
@@ -176,10 +179,10 @@ sum_dur
 #----------------
 sum_dep = dep %>%
   group_by(id) %>%
-  dplyr::summarise(ndive  = n(),
-                   Dive_dep = paste0(signif(mean(depth),3),
-                                     "+",signif(sd(depth),3),
-                                     " (", signif(max(depth),3),")")) %>%
+  summarise(ndive  = n(),
+            Dive_dep = paste0(signif(mean(depth),3),
+                              "+",signif(sd(depth),3),
+                              " (", signif(max(depth),3),")")) %>%
   ungroup()
 sum_dep
 
@@ -277,11 +280,11 @@ prop_oct = dive_class %>%
 #-------------------
 # prepare dataset
 #------------------- 
-detach("package:plyr", unload = TRUE)
-join = loc %>%
-  left_join(dep, by = "id") %>%
-  left_join(dur, by = "id")
-names(join)
+# detach("package:plyr", unload = TRUE)
+# join = loc %>%
+#   left_join(dep, by = "id") %>%
+#   left_join(dur, by = "id")
+# names(join)
 
 #----------------
 table_loc = loc %>%
@@ -325,6 +328,8 @@ table_dep
 table = table_loc %>%
   left_join(table_dep, by = "id") %>%
   left_join(table_dur, by = "id")
+table
+saveRDS(table, "./RDATA/6.Table_summary_17ids.RDS")
 
 
 #-------------------

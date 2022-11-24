@@ -15,15 +15,23 @@ library(gridExtra)
 ######################################
 # import data
 ######################################
-dive <- readRDS("./RDATA/1c.diveSummary_5HP_calib_5m_zoc0.RDS")
+dive <- readRDS("./RDATA/1b.diveSummary_5HP_calib_5m_zoc0.RDS") %>%
+  select(id, period, start, end, maxdep, meandep, 
+         dur, des_rate, asc_rate, bot_dur)
 names(dive)
-dive = dive %>%
-  select(id, period, maxdep, dur, meandep, des_rate, asc_rate, bot_dur)
-dat = as.matrix(dive[,-c(1:3)])
+dat = as.matrix(dive[,-c(1:4)]) # retain numeric variables
 
 # center variables
 dat = scale(dat, center = TRUE, scale = TRUE)
 summary(dat)
+
+
+
+
+
+
+
+
 
 
 
@@ -35,14 +43,14 @@ summary(dat)
 k = 5
 
 # impute missing values with PCA
-system.time({ res.comp <- imputePCA(dat, ncp = 5, graph = FALSE) }) # 50 sec
+system.time({ res.comp <- imputePCA(dat, ncp = 2, graph = FALSE) }) # 3 sec
 fit <- kmeans(na.omit(dat), centers = k,
               nstart = 50, iter.max = 15)   # k cluster solution
 # fit <- kmeans(res.comp$completeObs, centers = k,
 #               nstart = 50, iter.max = 15)   # k cluster solution
-
-# get cluster means
-aggregate(res.comp$completeObs,by=list(fit$cluster),FUN=mean)
+# 
+# # get cluster means
+# aggregate(res.comp$completeObs,by=list(fit$cluster),FUN=mean)
 
 # # visualize kmeans
 # fviz_nbclust(na.omit(dat), kmeans, method = "wss")
@@ -50,15 +58,14 @@ aggregate(res.comp$completeObs,by=list(fit$cluster),FUN=mean)
 #              geom = "point", data = res.comp$completeObs)
 
 # append cluster assignment
-clust <- data.frame(dive, "cluster"=fit$cluster) %>% 
+clust <- data.frame(na.omit(dive), "cluster"=fit$cluster) %>% 
   as_tibble() %>%
   mutate(cluster = as.factor(cluster))
 names(clust)
-
-clust$cluster = factor(clust$cluster, levels=c("5","2","4","1","3"))
-# clust$cluster = factor(clust$cluster, levels=c("2","1","3"))
-summary(clust)
-clust = clust %>% filter(bot_dur < 100)
+clust = clust %>% arrange(id, start)
+# clust$cluster = factor(clust$cluster, levels=c("5","2","4","1","3"))
+# summary(clust)
+# clust = clust %>% filter(bot_dur < 100)
 
 
 #---------------------
@@ -76,17 +83,17 @@ clust %>%
             bot_dur   = mean(bot_dur, na.rm=T))  # in sec
 
 
-# #---------------------------------------
-# # find the optimal number of clusters
-# #---------------------------------------
-# library(factoextra)
-# library(cluster)
-# library(NbClust)
-# 
-# # Elbow method
-# fviz_nbclust(res.comp$completeObs, kmeans, method = "wss") +
-#   geom_vline(xintercept = 2, linetype = 2)+
-#   labs(subtitle = "Elbow method")
+#---------------------------------------
+# find the optimal number of clusters
+#---------------------------------------
+library(factoextra)
+library(cluster)
+library(NbClust)
+
+# Elbow method
+fviz_nbclust(res.comp$completeObs, kmeans, method = "wss") +
+  geom_vline(xintercept = 2, linetype = 2)+
+  labs(subtitle = "Elbow method")
 # 
 # # Silhouette method
 # fviz_nbclust(res.comp$completeObs, kmeans, method = "silhouette")+
@@ -117,10 +124,10 @@ clust %>%
 
 # dive characteristics WITH outliers
 #---------------------------------------
-a = ggplot(clust, aes(x=reorder(cluster,-maxdep,na.rm = TRUE), 
-                      y=-maxdep, fill=cluster)) +
+# x=reorder(cluster,-maxdep,na.rm = TRUE)
+a = ggplot(clust, aes(x=cluster, y=-maxdep, fill=cluster)) +
   geom_boxplot() +
-  stat_summary(fun.y="mean", colour="red", size=0.2) +
+  stat_summary(fun="mean", colour="red", size=0.2) +
   labs(x="Clusters", y="(m)",title="Max depth") +
   scale_fill_brewer(palette = "PiYG") +
   theme_tq()  +
@@ -129,7 +136,7 @@ a = ggplot(clust, aes(x=reorder(cluster,-maxdep,na.rm = TRUE),
 
 b = ggplot(clust, aes(x=cluster, y=-meandep, fill=cluster)) +
   geom_boxplot() +
-  stat_summary(fun.y="mean", colour="red", size=0.2) +
+  stat_summary(fun="mean", colour="red", size=0.2) +
   labs(x="Clusters", y="(m)", title="Mean depth") +
   scale_fill_brewer(palette = "PiYG") +
   theme_tq()  +
@@ -138,7 +145,7 @@ b = ggplot(clust, aes(x=cluster, y=-meandep, fill=cluster)) +
 
 c = ggplot(clust, aes(x=cluster, y=dur/60, fill=cluster)) +
   geom_boxplot() +
-  stat_summary(fun.y="mean", colour="red", size=0.2) +
+  stat_summary(fun="mean", colour="red", size=0.2) +
   labs(x="Clusters", y="(min)", title="Dive duration") +
   scale_fill_brewer(palette = "PiYG") +
   theme_tq()  +
@@ -146,7 +153,7 @@ c = ggplot(clust, aes(x=cluster, y=dur/60, fill=cluster)) +
 
 d = ggplot(clust, aes(x=cluster, y=des_rate, fill=cluster)) +
   geom_boxplot() +
-  stat_summary(fun.y="mean", colour="red", size=0.2) +
+  stat_summary(fun="mean", colour="red", size=0.2) +
   labs(x="Clusters", y="(m/s)", title="Descent rate") +
   scale_fill_brewer(palette = "PiYG") +
   theme_tq()  +
@@ -154,7 +161,7 @@ d = ggplot(clust, aes(x=cluster, y=des_rate, fill=cluster)) +
 
 e = ggplot(clust, aes(x=cluster, y=asc_rate, fill=cluster)) +
   geom_boxplot() +
-  stat_summary(fun.y="mean", colour="red", size=0.2) +
+  stat_summary(fun="mean", colour="red", size=0.2) +
   labs(x="Clusters", y="(m/s)", title="Ascent rate") +
   scale_fill_brewer(palette = "PiYG") +
   theme_tq()  +
@@ -162,7 +169,7 @@ e = ggplot(clust, aes(x=cluster, y=asc_rate, fill=cluster)) +
 
 f = ggplot(clust, aes(x=cluster, y=bot_dur, fill=cluster)) +
   geom_boxplot() + 
-  stat_summary(fun.y="mean", colour="red", size=0.2) +
+  stat_summary(fun="mean", colour="red", size=0.2) +
   labs(x="Clusters", y="(sec)", title="Bottom duration") +
   scale_fill_brewer(palette = "PiYG") +
   theme_tq()  +
@@ -278,11 +285,11 @@ ggplot(clust, aes(x=cluster, y=dur/60, fill=cluster)) +
 
   
 
-
-############     
-## HCPC
-############
-# system.time({ res.hcpc <- HCPC(data[,-c(1:2)], graph = FALSE) }) #
+# ############     
+# ## HCPC: not made for large datasets!
+# ############
+# dat = dive %>% filter(id == "22849b") %>% select(-c(id,period))
+# system.time({ res.hcpc <- HCPC(dat, graph = FALSE) }) #
 # 
 # # visualize the dendrogram
 # fviz_dend(res.hcpc, 

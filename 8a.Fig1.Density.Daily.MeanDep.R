@@ -2,9 +2,8 @@
 ## FIG 1: plot geom_density meanDep vs months ##
 ################################################
 
-library(visreg)
-library(plyr)
-library(mgcv)
+# library(visreg)
+# library(mgcv)
 library(patchwork)
 library(data.table)
 library(tidyverse)
@@ -13,7 +12,7 @@ library(tidyverse)
 ###############################################
 # load high resolution
 ###############################################
-setwd("/Users/philippinechambault/Documents/POST-DOC/2021/MSCA-GF/ANALYSES/HP")
+setwd("/Users/philippinechambault/Documents/POST-DOC/2021/MSCA-GF/ANALYSES/HP-Diel-Seasonal-Pattern")
 dive <- readRDS("./RDATA/1b.diveSummary_5HP_calib_5m_zoc0.RDS")  %>%
   mutate(date = as.Date(substr(start, 1, 10)),
          hour = substr(start, 12, 13),
@@ -59,7 +58,7 @@ pivot$metric2 = factor(pivot$metric2, levels = c("Mean depth","Maximum depth"))
 
 #---------------------------------
 # get mean daily depth/month/phase
-# to ass text on plot
+# to add text on plot
 #---------------------------------
 mean = pivot %>%
   group_by(day_night, month, metric2) %>%
@@ -86,20 +85,64 @@ text_night_max = mean %>%
 
 
 
+
+
+#-------------------------------------------------
+# calculate t tests between day and night / month
+#-------------------------------------------------
+library(ggpubr)
+library(rstatix)
+# pivot %>%
+#   dplyr::select(-c(id,date,median_dep,metric2)) %>%
+#   filter(metric == "max_dep")
+# group_by(month, day_night) %>%
+#   get_summary_stats(values, type = "mean_sd")
+
+stat_meandep = pivot %>%
+  dplyr::select(-c(id,date,median_dep,metric2)) %>%
+  filter(metric == "mean_dep") %>%
+  group_by(month) %>%
+  kruskal_test(values ~ day_night) %>%
+  adjust_pvalue(method = "BH") %>%
+  add_significance() %>%
+  mutate(day_night = "day",
+         metric2 = "Mean depth")
+
+stat_maxdep = pivot %>%
+  dplyr::select(-c(id,date,median_dep,metric2)) %>%
+  filter(metric == "max_dep") %>%
+  group_by(month) %>%
+  kruskal_test(values ~ day_night) %>%
+  adjust_pvalue(method = "BH") %>%
+  add_significance() %>%
+  mutate(day_night = "day",
+         metric2 = "Maximum depth")
+
+stat = bind_rows(stat_meandep, stat_maxdep)
+stat$metric2 = factor(stat$metric2, levels = c("Mean depth",
+                                                "Maximum depth"))
+
+
 #------------------
 # plot facet_grid
 #------------------
+pivot$metric2 = factor(pivot$metric2, levels = c("Mean depth",
+                                                 "Maximum depth"))
+
 ggplot(data = pivot, aes(x=values, fill=day_night, colour=day_night), 
        colour="gray47") +
   geom_density(aes(y=..scaled..),alpha=.6,lwd=0.2) + 
   coord_flip() +
   scale_x_continuous(trans = "reverse", limits = c(400, 0)) + 
-  scale_y_continuous(breaks=c(0, 0.5, 1), labels=c(0,0.5,1)) +
+  scale_y_continuous(breaks=c(0, 0.5, 1), labels = c(0,0.5,1)) +
   scale_fill_manual(values = c("navajowhite3","dodgerblue3")) +
   labs(y = "Dive probability", x = "Dive depth (m)", 
        title= "", fill="") +
   facet_grid(metric2~month) +
   theme_bw() +
+  geom_text(data=stat, aes(x=350, y = 0.5, label=p.adj.signif),
+            size=2, colour = "black") +
+  
   geom_text(data=text_day_mean, aes(x=values, y = 0.5, label=text), 
             size=2, colour = "navajowhite4") + 
   geom_text(data=text_night_mean, aes(x=values, y = 0.5, label=text), 

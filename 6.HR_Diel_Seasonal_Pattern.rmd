@@ -735,7 +735,7 @@ Some ideas to dig further: how the photoperiod can influence the foraging behavi
 ```{r, echo=F}
 prop = dive %>%
   dplyr::group_by(id, month) %>%
-  dplyr::summarize(ntot = max(dive),
+  dplyr::summarize(ntot  = max(dive),
             dives0_20m   = n_distinct(dive[maxdep<=20]),
             dives20_50m  = n_distinct(dive[maxdep>20 & maxdep<=50]),
             dives50_100m = n_distinct(dive[maxdep>50 & maxdep<=100]),
