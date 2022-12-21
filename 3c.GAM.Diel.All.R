@@ -23,6 +23,7 @@ library(GGally)
 lr <- readRDS("./RDATA/1c.daylength_depth_LR_19ids.RDS")
 lr$month = as.numeric(substr(lr$date, 6, 7))
 unique(lr$id) # 19 ids
+unique(lr$month)
 
 # select individuals with long tracking dataset 
 # at least 2 months, not only covering summer
@@ -41,6 +42,7 @@ lr = lr %>%
          id != "27262", id != "27262b", id != "93100") # remove HR tags
 unique(lr$id) # 8 ids
 summary(lr)
+unique(lr$month)
 
 
 
@@ -49,8 +51,9 @@ summary(lr)
 # load HR dataset
 #########################
 hr <- readRDS("./RDATA/1b.daylength_depth_HR_5ids.RDS") %>%
-  dplyr::select(-c(sunrise, sunset))
-hr$month = as.numeric(substr(hr$date, 6, 7))
+  dplyr::select(-c(sunrise, sunset)) %>%
+  mutate(month = as.numeric(substr(date, 6, 7))) %>%
+  filter(month != "Jan")
 unique(hr$id)  # 5 ids
 names(lr)
 names(hr)
@@ -77,10 +80,10 @@ corr[is.na(corr)] <- 0
 corr_p <- cor_pmat(cor_dat)
 corr_p[is.na(corr_p)] <- 1
 
-cor.test(dat$mean_dep, dat$daylength)   # -0.67
-cor.test(dat$median_dep, dat$daylength) # -0.62
+cor.test(dat$mean_dep, dat$daylength)   # -0.33
+cor.test(dat$median_dep, dat$daylength) # -0.32
 cor.test(dat$max_dep, dat$daylength)    # -0.31
-cor.test(dat$mean_dep, dat$month)       # 0.61
+cor.test(dat$mean_dep, dat$month)       # 0.30
 
 # display
 ggcorrplot(
@@ -95,8 +98,11 @@ ggcorrplot(
 
 
 
+
+
+
 ###########################################
-# SI Fig 1: pairwise colinearity
+# pairwise colinearity
 ###########################################
 # Create data 
 data <- dat %>% dplyr::select(-c(id, date)) 
@@ -127,13 +133,13 @@ ggpairs(data, title="Pairwise correlations between variables",
 # GAM: meandep vs day length
 #################################
 dat$id = as.factor(dat$id)
-system.time({ m = gam(max_dep ~ s(daylength, k=4) + 
+system.time({ m = gam(mean_dep ~ s(daylength, k=4) + 
                         s(id, bs = 're') +           # random intercept
                         s(daylength, id, bs = 're'),  # random slope
                       data = dat, method="REML") })
 summary(m)                     # meandep: 77%, mediandep: 71%, maxdep: 40%
 plot(m,pages=1, shade=T)
-as.numeric(performance::r2(m)) # 0.76
+as.numeric(performance::r2(m)) 
 # saveRDS(m, "./RDATA/4.GAM/GAM_output_daylength_meandep_slope_intercept_all.rds")
 # saveRDS(m, "./RDATA/4.GAM/GAM_output_daylength_mediandep_slope_intercept_all.rds")
 # saveRDS(m, "./RDATA/4.GAM/GAM_output_daylength_maxdep_slope_intercept_all.rds")

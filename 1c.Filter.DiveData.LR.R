@@ -549,6 +549,60 @@ saveRDS(daylength3, "./RDATA/1c.daylength_depth_LR_19ids.RDS")
 
 
 
+###################################
+# solar altitude vs mean depth
+###################################
+dep <- readRDS("./RDATA/1c.depth_Binned_LR_19ids.RDS")
+names(dep)
+daily = dep %>%
+  filter(day_depart != 1) %>%  # remove first day because never complete (starts in the middle of day)
+  group_by(id, date) %>%
+  summarise(maxdep    = max(depth),
+            mediandep = median(depth),
+            meandep   = mean(depth),
+            lon       = mean(lon),
+            lat       = mean(lat)) %>%
+  ungroup()
+daily
+summary(daily)
+daily = daily[!is.na(daily$lon),]
+
+# dive_select = dep %>% 
+#   select(id, period, month, date, depth, sunrise, sunset) %>%
+#   rename(maxdep = depth)
+
+
+# extract sun altitude
+#----------------------
+sunpos = getSunlightPosition(data = daily,
+                             keep = c("altitude","azimuth")) %>%
+  as_tibble()
+sunpos
+
+# add sunpos to dive dataset
+#-------------------------------
+library(rCAT)
+sunpos2 = sunpos %>%
+  left_join(daily, by = c("date")) %>%
+  select(-c(lon.x, lat.x)) %>%
+  rename(max_dep = maxdep, mean_dep = meandep, 
+         median_dep = mediandep, lon = lon.y, lat = lat.y) %>%
+  mutate(alt_deg = rad2deg(altitude))
+names(sunpos2)
+summary(sunpos2)
+length(unique(sunpos2$id)) # 19 ids
+
+
+# save data
+#--------------
+saveRDS(sunpos2, "./RDATA/1c.solar_Altitude_depth_LR_19ids.RDS")
+
+
+
+
+
+
+
 #############################################
 # calculate daily depth (max, mean, median)
 #############################################

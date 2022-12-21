@@ -187,9 +187,9 @@ hp = hp %>% rename(posix_local = date, date = date2)
 # identify phases of the day based on coordinates and dates
 #-----------------------------------------------------------
 system.time({ # 104 sec
-sun  = getSunlightTimes(data = hp, tz="America/Nuuk",  
-                        keep = c("sunrise","sunset","dusk",
-                               "dawn","night","nightEnd"))  })
+  sun  = getSunlightTimes(data = hp, tz="America/Nuuk",  
+                          keep = c("sunrise","sunset","dusk",
+                                   "dawn","night","nightEnd"))  })
 head(sun)
 
 # check earlier and latest sunset and sunrise in 2014
@@ -473,10 +473,54 @@ summary(dive2$depth_cor) # 0 to 361 m
 dive2 -> dive
 rm(dive2)
 
-setwd("/Users/philippinechambault/Documents/POST-DOC/2021/MSCA-GF/ANALYSES/HP")
-saveRDS(dive, paste0("./RDATA/1b.dive_5HP_calib_",
-                     threshold,"m_zoc",offset,".RDS"))
+
+
+
+
+
+
+
+###################################
+# solar elevation 
+###################################
+names(dive)
+
+# identify light regimes based on coordinates and dates
+#-----------------------------------------------------------
+colnames(dive)[6] = "date2"
+colnames(dive)[1] = "date" # rename so it matches function getSunlightPosition
+system.time({     # 6 sec
+  sun  = getSunlightPosition(data = dive[,c("date","lon","lat")], # include date with times
+                             keep = c("altitude"))  }) 
+sun = sun %>% mutate(alt_deg = rad2deg(altitude)) %>% as_tibble()
 gc()
+head(sun)
+
+# combine with dive dataset and convert radians to degrees
+#----------------------------------------------------------
+dive2 = bind_cols(dive, sun[,c("alt_deg")]) %>%
+  mutate(twilight  = case_when(alt_deg > 0 ~ "Day",          
+                              alt_deg > (-6) & alt_deg < (0) ~ "Civil twilight",  
+                              alt_deg > (-12) & alt_deg < (-6) ~ "Nautical twilight", 
+                              alt_deg > (-18) & alt_deg < (-12) ~ "Astronomical twilight",
+                              alt_deg < (-18) ~ "Night"))                 
+names(dive2)
+table(dive2$twilight) / nrow(dive2) * 100
+# Astronomical twilight        Civil twilight                   Day 
+#              7.937112             10.401189             45.624594 
+# Nautical twilight                 Night 
+#          9.448185             26.588919
+
+# save data
+#--------------
+saveRDS(dive2, paste0("./RDATA/1b.dive_5HP_calib_",
+                      threshold,"m_zoc",offset,".RDS"))
+gc()
+dive2 -> dive
+rm(dive2)
+
+
+
 
 
 
@@ -489,7 +533,7 @@ gc()
 # calculate daily depth (max, mean, median)
 #############################################
 # Summarize data per id: extract daily max depth
-# "dawn" refers to morning, while "dusk" refers only to the evening twilight
+# "dawn" refers to morning, "dusk" refers to the evening twilight
 dat = dive %>%
   mutate(month = as.factor(substr(date, 6, 7)),
          day_night = case_when(period == "day"   ~ "day",
@@ -540,18 +584,21 @@ saveRDS(dep_daily, "./RDATA/1b.dailyDepth_HR.RDS")
 ###############################################################################
 # dive <- readRDS("./RDATA/1b.dive_5HP_calib_5m_zoc0.RDS")
 names(dive)
+dive = dive %>% rename(posix_local = date, 
+                       date = date2)
 
 system.time({  # 85 sec
 ndive_summary = dive %>%
-  filter(dive != 0) %>%             # remove surface times
+  filter(dive != 0) %>%           # remove surface times
   group_by(dive, id) %>% 
   mutate(difftime = c(NA, diff(posix_local))) %>%
   summarise(start     = first(posix_local),
             end       = last(posix_local),
-            dur       = n(),        # dive duration in sec
+            nobs      = n(),      # number of observations (depths) / dive
             lon       = mean(lon),
             lat       = mean(lat),
-            
+            solar_alt = mean(alt_deg),
+            twilight  = first(twilight),
             maxdep    = max(depth),
             mindep    = min(depth),
             meandep   = mean(depth),
@@ -565,14 +612,24 @@ ndive_summary = dive %>%
             diff_dep_asc  = mean(diff(depth[phase == "A"])),
             diff_dep_des  = mean(diff(depth[phase == "D"])),
             diff_dep_bot  = mean(diff(depth[phase == "B"]))) %>%
-  mutate(vspeed   = abs(diff_dep / dur),  # vertical speed m/s
+  mutate(dur      = as.numeric(difftime(end, start, units = "secs")),
+         vspeed   = abs(diff_dep / dur),  # vertical speed m/s
          asc_rate = abs(diff_dep_asc / asc_dur),
          des_rate = abs(diff_dep_des / des_dur),
          bot_rate = abs(diff_dep_bot / bot_dur)) %>%
   ungroup()
 })
-names(ndive_summary)    # 395 825 dives
+names(ndive_summary) 
+str(ndive_summary)
+dim(ndive_summary)      # 395 825 dives
 summary(ndive_summary)
+
+
+# check outliers (extreme duration)
+#------------------------------------
+hist((ndive_summary$dur)/60, xlab = "Dive duration (min)")
+nrow(ndive_summary[ndive_summary$dur>(7*60),]) / nrow(ndive_summary) * 100 # 0.001%
+ndive_summary = ndive_summary %>% filter(dur < (7*60))
 
 
 # save dataset

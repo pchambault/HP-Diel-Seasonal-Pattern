@@ -10,7 +10,6 @@ library(dplyr)
 library(viridis)
 library(DT)
 library(kableExtra)
-# library(weanlingNES)
 library(data.table)
 library(gtExtras)
 library(scales)
@@ -467,3 +466,72 @@ gt(table1) %>%
 # id 22849: not enough days of tracking for dur for sparkline
 id = dur %>% filter(id == "22849")
 id
+
+
+
+
+
+
+
+
+####################################
+# mean, sd, max depth for SUMMARY
+####################################
+lr <- readRDS("./RDATA/1c.dailyDepth_LR.RDS") %>%
+  mutate(dateset = "low")
+hr <- readRDS("./RDATA/1b.dailyDepth_HR.RDS") %>%
+  mutate(dateset = "high")
+names(hr)
+names(lr)
+dive = bind_rows(hr,lr)
+
+mean(dive$maxdep) # 188 m
+sd(dive$maxdep)   # 83 m
+max(dive$maxdep)  # 450 m
+
+# ndives
+#-----------
+table <- readRDS("./RDATA/6.Table_summary_17ids.RDS")
+table$ndive = as.numeric(gsub("\\,", "", table$ndive))
+sum(table$ndive)   # 411 448 dives
+subset = table %>% filter(id == "93100*" | id == "27262b*" | id == "22849b*"
+                          | id == "22850b*"| id == "27262*")
+sum(subset$ndive)  # 401 438 dives
+
+
+
+
+
+
+
+
+
+
+#########################################
+# STATS: pairwise correlations
+#########################################
+dive <- readRDS("./RDATA/1b.diveSummary_5HP_calib_5m_zoc0.RDS")
+names(dive)
+cor_dat = dive %>% 
+  dplyr::select(c(dur, maxdep, meandep, 
+                  bot_dur, asc_dur, des_dur))
+corr <- round(cor(cor_dat, use = "pairwise.complete.obs"), 1)
+corr[is.na(corr)] <- 0
+corr_p <- cor_pmat(cor_dat)
+corr_p[is.na(corr_p)] <- 1
+
+# display
+ggcorrplot(
+  corr,
+  # p.mat = p.mat,
+  hc.order = TRUE,
+  method = "square",
+  type = "lower",
+  lab = TRUE,
+  sig.level = 0.05
+)
+
+
+
+
+
