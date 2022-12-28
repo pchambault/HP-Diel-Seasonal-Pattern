@@ -1,0 +1,235 @@
+---
+title: "Recovery times"
+author: "Philippine Chambault"
+date: "2022-12-28"
+output:
+  bookdown::html_document2:
+    number_sections: yes
+    code_folding: show
+    df_print: default
+    fig_caption: yes
+    toc: yes
+    toc_float:
+      collapsed: yes
+      smooth_scroll: no
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(
+  echo      = TRUE,
+  fig.align = "center",
+  message = FALSE,
+  warning = FALSE,
+  out.width = "100%"
+)
+```
+
+__Background__:
+Investigation of recovery times in harbour porpoise (time between dives) and potential relationship with dive depth (longer recovery times for deeper dives). Dive threshold = 5 m.
+
+```{r, global_options, include=FALSE}
+library(ggplot2)
+library(tidyquant)
+library(gridExtra)
+library(tidyverse)
+library(viridis)
+library(DT)
+library(data.table)
+library(ggcorrplot)
+```
+
+
+# Load dataset 
+```{r, echo=F}
+sum <- readRDS("./RDATA/1b.diveSummary_5HP_calib_5m_zoc0.RDS")
+sum = sum[order(sum$start),]
+
+# difference between end of dive t and start of dive t+1
+sum2 = sum %>%
+  group_by(id) %>%
+  mutate(start_next = lead(start)) %>% # select the next dive start
+  ungroup()
+
+# difference between end (dive t) and start (dive t+1)
+sum2 = sum2 %>%
+  group_by(id) %>%
+  mutate(recovery = as.numeric(start_next - start)) %>%
+  ungroup()
+
+# add depth class
+sum2$class = cut(sum2$maxdep, 
+                 breaks = c(0, 10, 20, 50, 100, 365))
+```
+
+
+
+
+# Recovery times vs depth {.tabset}
+```{r, echo=F}
+k = 5
+```
+
+## All
+```{r, echo=FALSE, fig.pos="placeHere", fig.height=4, fig.cap="Recovery time (time between end of dive t and dive t+1) according to depth class for the 5 porpoises (high resolution tags)."}
+ggplot(sum2, aes(x = class, y = recovery/60, fill = class)) +
+  geom_boxplot(outlier.shape = NA) +
+  scale_fill_brewer(palette = "PiYG") +
+  labs(y = "Recovery time (min)", x = "Depth class (m)",
+       title = paste0("Dive threshold at ",k,"m")) +
+  ylim(0,10) +
+  theme_tq() +
+  theme(legend.position = "none") 
+```
+
+## Per light cycle
+```{r, echo=FALSE, fig.pos="placeHere", fig.height=4, fig.cap="Recovery time (time between end of dive t and dive t+1) according to depth class for the 5 porpoises (high resolution tags)."}
+ggplot(sum2, aes(x = class, y = recovery/60, fill = class)) +
+  geom_boxplot(outlier.shape = NA) +
+  scale_fill_brewer(palette = "PiYG") +
+  labs(y = "Recovery time (min)", x = "Depth class (m)",
+       title = paste0("Dive threshold at ",k,"m")) +
+  ylim(0,10) +
+  facet_wrap(.~period, ncol = 4) +
+  theme_tq() +  
+  theme(legend.position = "none") 
+```
+
+
+
+# Correlation with max depth
+```{r, echo=F}
+cor.test(sum2$maxdep, sum2$recovery) 
+```
+
+```{r, echo=FALSE, fig.pos="placeHere", fig.height=4, fig.cap="Corremation between recovery time and max depth."}
+ggplot(sum2, aes(x = maxdep, y = recovery/60)) +
+  geom_point(size = 0.3) +
+  geom_smooth(method = "gam") +
+  labs(y = "Recovery time (min)", x = "Max depth (m)",
+       title = paste0("Dive threshold at ",k,"m")) +
+  theme_tq() +
+  ylim(0,50)
+```
+
+
+
+
+
+
+
+
+
+# Number of dives/hour {.tabset}
+
+```{r, echo=F}
+hourly = sum2 %>%
+  mutate(date = as.Date(start),
+         hour = as.numeric(format(start, "%H"))) %>%
+  group_by(id) %>% 
+  mutate(day  = as.numeric(date - first(date)) + 1) %>%
+  ungroup() %>%
+  group_by(id, hour, day) %>%
+  summarise(ntot = n_distinct(dive),
+            dives0_20m   = n_distinct(dive[maxdep<=20]),
+            dives20_50m  = n_distinct(dive[maxdep>20 & maxdep<=50]),
+            dives50_100m = n_distinct(dive[maxdep>50 & maxdep<=100]),
+            dives_deep100m = n_distinct(dive[maxdep>100])) %>%
+  ungroup()
+
+mean_hourly = hourly %>%
+  group_by(id, hour) %>%
+  summarise(mean_dives0_20m     = mean(dives0_20m),
+            mean_dives20_50m    = mean(dives20_50m),
+            mean_dives50_100m   = mean(dives50_100m),
+            mean_dives_deep100m = mean(dives_deep100m))
+
+pivot = mean_hourly %>%
+  pivot_longer(c(mean_dives0_20m, mean_dives20_50m, 
+                 mean_dives50_100m, mean_dives_deep100m), 
+               names_to = "depth_class", values_to = "n") %>%
+  select(id,hour,depth_class,n) 
+
+pivot = pivot %>%
+  mutate(class = case_when(depth_class == "mean_dives0_20m" ~ "0-20 m",
+                           depth_class == "mean_dives20_50m" ~ "20-50 m",
+                           depth_class == "mean_dives50_100m" ~ "50-100 m",
+                           depth_class == "mean_dives_deep100m" ~ ">100 m"))
+pivot$class = factor(pivot$class,
+                     levels=c("0-20 m","20-50 m",
+                              "50-100 m", ">100 m"))
+```
+
+
+## Mean N dives (facet_grid)
+```{r, echo=FALSE, fig.pos="placeHere", fig.height=6, fig.cap="Mean daily number of hourly dives according to max depth (dive threshold: 5 m)."}
+ggplot(pivot, aes(y=n, x=hour)) +
+  geom_histogram(aes(fill=class), stat="identity",
+                 position="stack", fill="grey") +
+  facet_grid(class~id) +
+  # scale_fill_brewer(palette = 1, direction = 1) +
+  labs(x = "Hours", y = "Mean n hourly dives", fill = "") +
+  theme_tq() +
+  theme(legend.position = "none")
+```
+
+
+## Mean N dives
+```{r, echo=FALSE, fig.pos="placeHere", fig.height=3, fig.cap="Mean daily number of hourly dives according to max depth (dive threshold: 5 m)."}
+ggplot(pivot, aes(y=n, x=hour)) +
+  geom_histogram(aes(fill=class), stat="identity",
+                 position="stack") +
+  facet_wrap(~id, ncol=5) +
+  scale_fill_brewer(palette = 1, direction = 1) +
+  labs(x = "Hours", y = "Mean n hourly dives",fill = "") +
+  theme_tq()
+```
+
+
+
+
+## Frequency
+```{r, echo=F}
+hourly = sum2 %>%
+  mutate(hour = as.numeric(format(start, "%H"))) %>%
+  group_by(id, hour) %>%
+  summarise(ntot         = n_distinct(dive),
+            dives0_20m   = n_distinct(dive[maxdep<=20]),
+            dives20_50m  = n_distinct(dive[maxdep>20 & maxdep<=50]),
+            dives50_100m = n_distinct(dive[maxdep>50 & maxdep<=100]),
+            dives_deep100m = n_distinct(dive[maxdep>100])) %>%
+  ungroup()
+
+prop = hourly %>%
+  mutate(dives0_20m     = (dives0_20m / ntot) * 100,
+         dives20_50m    = (dives20_50m / ntot) * 100,
+         dives50_100m   = (dives50_100m / ntot) * 100,
+         dives_deep100m = (dives_deep100m / ntot) * 100)
+
+pivot = prop %>%
+  pivot_longer(c(dives0_20m, dives20_50m, 
+                 dives50_100m, dives_deep100m), 
+               names_to = "depth_class", values_to = "prop") %>%
+  select(id,hour,ntot,depth_class,prop) 
+
+pivot = pivot %>%
+  mutate(class = case_when(depth_class == "dives0_20m" ~ "0-20 m",
+                           depth_class == "dives20_50m" ~ "20-50 m",
+                           depth_class == "dives50_100m" ~ "50-100 m",
+                           depth_class == "dives_deep100m" ~ ">100 m"))
+
+pivot$class = factor(pivot$class,
+                     levels=c("0-20 m","20-50 m",
+                              "50-100 m", ">100 m"))
+```
+
+```{r, echo=FALSE, fig.pos="placeHere", fig.height=3, fig.cap="Porportion of hourly dives according to max depth."}
+ggplot(pivot, aes(y=prop, x=hour)) +
+  geom_histogram(aes(fill=class), stat="identity",
+                 position="fill") +
+  facet_wrap(~id, ncol=5) +
+  scale_fill_brewer(palette = 1, direction = 1) +
+  labs(x = "Hours of the day", y = "Dive frequency (%)",fill = "") +
+  theme_tq()
+```
+
+
