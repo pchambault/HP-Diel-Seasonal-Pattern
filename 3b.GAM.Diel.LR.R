@@ -79,14 +79,14 @@ ggcorrplot(
 # GAM: meandep vs day length
 #################################
 daylength$id = as.factor(daylength$id)
-system.time({ m = gam(mean_dep ~ s(daylength, k=5) + #s(day_depart, k=5) +
-                        s(id, bs = 're') +           # random intercept
+system.time({ m = gam(mean_dep ~ s(daylength, k=5) +  #s(day_depart, k=5) +
+                        s(id, bs = 're') +            # random intercept
                         s(daylength, id, bs = 're'),  # random slope
                       data = daylength, method="REML") })
 summary(m)                     # dev: 65%
 plot(m,pages=1, shade=T)
-as.numeric(performance::r2(m)) # 0.52
-saveRDS(m, "./RDATA/4.GAM/GAM_LR_output_daylength_meandep_slope_intercept_8ids.rds")
+as.numeric(performance::r2(m)) # 0.64
+saveRDS(m, "./RDATA/3.GAM/GAM_LR_output_daylength_meandep_slope_intercept_8ids.rds")
 
 # residuals: good fit
 par(mfrow=c(2,2),mar=c(6,5,6,3))
@@ -125,7 +125,7 @@ ind_pred <- ind_pred_inter %>%
   # trick to avoid calling twice this object in the console for display
   .[]
 ind_pred
-saveRDS(ind_pred, "./RDATA/4.GAM/Indiv-GAM_LR_daylength_meandep_slope_intercept_8ids.rds")
+saveRDS(ind_pred, "./RDATA/3.GAM/Indiv-GAM_LR_daylength_meandep_slope_intercept_8ids.rds")
 
 ggplot(ind_pred, aes(x = daylength, y = fit_ind)) +
   geom_line(aes(colour=id),lwd=1) +
@@ -167,7 +167,7 @@ pop_pred <- setDT(
   # trick to avoid calling twice this object in the console for display
   .[]
 pop_pred = as_tibble(pop_pred)
-saveRDS(pop_pred, "./RDATA/4.GAM/Pop-GAM_LR_daylength_meandep_slope_intercept_8ids.rds")
+saveRDS(pop_pred, "./RDATA/3.GAM/Pop-GAM_LR_daylength_meandep_slope_intercept_8ids.rds")
 
 
 # plot pop curve + SE

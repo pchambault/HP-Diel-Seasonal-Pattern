@@ -510,13 +510,13 @@ table(dive2$twilight) / nrow(dive2) * 100
 #              7.937112             10.401189             45.624594 
 # Nautical twilight                 Night 
 #          9.448185             26.588919
-
-# save data
-#--------------
-saveRDS(dive2, paste0("./RDATA/1b.dive_5HP_calib_",
-                      threshold,"m_zoc",offset,".RDS"))
-gc()
 dive2 -> dive
+
+# # save data
+# #--------------
+# saveRDS(dive, paste0("./RDATA/1b.dive_5HP_calib_",
+#                       threshold,"m_zoc",offset,".RDS"))
+gc()
 rm(dive2)
 
 
@@ -529,44 +529,7 @@ rm(dive2)
 
 
 
-#############################################
-# calculate daily depth (max, mean, median)
-#############################################
-# Summarize data per id: extract daily max depth
-# "dawn" refers to morning, "dusk" refers to the evening twilight
-dat = dive %>%
-  mutate(month = as.factor(substr(date, 6, 7)),
-         day_night = case_when(period == "day"   ~ "day",
-                               period == "dusk"  ~ "night",
-                               period == "dawn"  ~ "night",
-                               period == "night" ~ "night")) %>%
-  filter(month!="01") %>% # remove few dives recorded in Jan for only 1 ID
-  ungroup()
-gc()
 
-# calculate mean, max, median depth.day/ID
-#-----------------------------------------
-dep_daily = dat %>%
-  group_by(id) %>%
-  mutate(day = as.numeric(date - first(date)) + 1) %>%
-  group_by(id, date, day_night) %>%
-  summarise(maxdep    = max(depth, na.rm=T),
-            mindep    = min(depth, na.rm=T),
-            meandep   = mean(depth, na.rm=T),
-            mediandep = median(depth, na.rm=T)) %>%
-  ungroup() %>%
-  group_by(id) %>%
-  mutate(day   = as.numeric(date - first(date)) + 1,
-         month = substr(date, 6, 7),
-         month2 = format(date, "%b")) %>%
-  ungroup()
-dep_daily
-
-dep_daily$month2 = factor(dep_daily$month2, 
-                          levels=c("Jul","Aug","Sep",
-                                   "Oct","Nov","Dec"))
-
-saveRDS(dep_daily, "./RDATA/1b.dailyDepth_HR.RDS")
 
 
 
@@ -631,6 +594,27 @@ hist((ndive_summary$dur)/60, xlab = "Dive duration (min)")
 nrow(ndive_summary[ndive_summary$dur>(7*60),]) / nrow(ndive_summary) * 100 # 0.001%
 ndive_summary = ndive_summary %>% filter(dur < (7*60))
 
+# remove dives lasting 0 min
+#---------------------------
+ndive_summary %>% filter(dur == 0) %>% View()       # 16530 dives!
+ndive_summary = ndive_summary %>% filter(!dur == 0) # 379 289 dives left
+
+# remove very short dives < 20 sec
+#---------------------------------
+summary(ndive_summary$dur) # min: 1 sec!
+ndive_summary %>%
+  group_by(id) %>%
+  summarise(ndives = n_distinct(dive))
+ndive_summary %>%
+  filter(dur < 20) %>%
+  group_by(id) %>%
+  summarise(ndives = n_distinct(dive))
+ndive_summary = ndive_summary %>%
+  filter(dur > 20) # retain dives longer than 20 sec
+ndive_summary %>%
+  group_by(id) %>%
+  summarise(ndives = n_distinct(dive))
+hist(ndive_summary$dur/60)
 
 # save dataset
 #--------------
@@ -644,15 +628,106 @@ saveRDS(ndive_summary, paste0("./RDATA/1b.diveSummary_5HP_calib_",
 
 
 
+#########################################################
+# remove outlier dives from full dataset (1 row=1 depth)
+# dives < 20 sec
+#########################################################
+dive2 = ndive_summary %>%
+  select(id, dive) %>%
+  left_join(dive, by = c("id","dive"))
+dim(dive2) # 25 652 490 depths
+setdiff(unique(dive2$dive), unique(ndive_summary$dive))
+dive2 %>%
+  group_by(id) %>%
+  summarise(ndives = n_distinct(dive))
+# id     ndives
+# 22849b  58968
+# 22850b  57428
+# 27262    6357
+# 27262b  61025
+# 93100   66372
+
+dive2 = dive2[order(dive2$id, dive2$date),]
+ggplot(dive2[dive2$id=="27262" & dive2$dive==1,],
+       aes(x=date, y=-depth)) +
+  geom_point()
+
+# remove first dive of each ID (can be incomplete)
+dive2 = dive2 %>%
+  group_by(id) %>%
+  filter(dive != 1) %>%
+  ungroup()
+dim(dive2). # 25 652 362
+dive2 %>%
+  group_by(id) %>%
+  summarise(ndives = n_distinct(dive))
+
+dive2 -> dive
+rm(dive2)
+saveRDS(dive, "./RDATA/1b.dive_5HP_calib_5m_zoc0.RDS")
+
+
+
+
+
+
+
+
+#############################################
+# calculate daily depth (max, mean, median)
+#############################################
+# Summarize data per id: extract daily max depth
+# "dawn" refers to morning, "dusk" refers to the evening twilight
+dive = dive %>%
+  mutate(month = format(date2, "%b"),
+         day_night = case_when(period == "day"   ~ "day",
+                               period == "dusk"  ~ "night",
+                               period == "dawn"  ~ "night",
+                               period == "night" ~ "night")) %>%
+  filter(month!="Jan") %>% # remove few dives recorded in Jan for only 1 ID
+  ungroup()
+gc()
+
+# calculate mean, max, median depth/day/ID
+#-----------------------------------------
+dep_daily = dive %>%
+  group_by(id) %>%
+  mutate(day = as.numeric(date2 - first(date2)) + 1) %>%
+  group_by(id, date2, day_night) %>%
+  summarise(maxdep    = max(depth, na.rm=T),
+            mindep    = min(depth, na.rm=T),
+            meandep   = mean(depth, na.rm=T),
+            mediandep = median(depth, na.rm=T)) %>%
+  ungroup() %>%
+  group_by(id) %>%
+  mutate(day   = as.numeric(date2 - first(date2)) + 1,
+         month = format(date2, "%b")) %>%
+  ungroup()
+dep_daily
+
+dep_daily$month = factor(dep_daily$month,
+                         levels=c("Jul","Aug","Sep",
+                                  "Oct","Nov","Dec"))
+saveRDS(dep_daily, "./RDATA/1b.dailyDepth_HR.RDS")
+
+
+
+
+
+
+
+
+
 
 ###########################################
 # calculate daylength per day and ID
 ###########################################
+# dive <- readRDS("./RDATA/1b.dive_5HP_calib_5m_zoc0.RDS")
 names(dive)
 daily = dive %>%
   filter(day_depart != 1) %>%  # remove first day because never complete (starts in the middle of day)
-  group_by(id, date) %>%
-  summarise(maxdep = max(depth),
+  group_by(id, date2) %>%
+  summarise(maxdep    = max(depth),
             mediandep = median(depth),
             meandep   = mean(depth))
 
@@ -660,7 +735,7 @@ daily = dive %>%
 #------------------------------------
 daylength = dive %>%
   filter(day_depart != 1) %>%  # remove first day because never complete (starts in the middle of day)
-  group_by(id, date) %>%
+  group_by(id, date2) %>%
   summarise(sunset  = mean(sunset),
             sunrise = mean(sunrise)) %>%
   mutate(daylength  = as.numeric(difftime(sunset, sunrise, units = "hour"))) %>%
@@ -670,12 +745,13 @@ daylength
 # add daylength to dive dataset
 #-------------------------------
 daylength2 = daylength %>%
-  left_join(daily, by = c("id", "date")) %>%
+  # rename(date = date2) %>%
+  left_join(daily, by = c("id", "date2")) %>%
   rename(max_dep = maxdep, mean_dep = meandep, median_dep = mediandep)
 daylength2
 names(daylength2)
 length(unique(daylength2$id)) # 5 ids
-
+summary(daylength2)
 
 # save data
 #--------------

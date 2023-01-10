@@ -30,9 +30,9 @@ loc <- read_excel("./DATA/HP_Satellite_data/HP_satellite-tag_data.xlsx",
                   col_types = c("text", "text", "text","text",
                                 "text", "text", "numeric", "numeric")) %>%
   as_tibble() %>%
-  dplyr::select(-c(DeployID)) %>%
-  dplyr::rename(id  = Ptt, instr = Instr, dateTime = Date, lc = Quality, 
-         lon = Longitude, lat = Latitude) 
+  select(-c(DeployID)) %>%
+  rename(id  = Ptt, instr = Instr, dateTime = Date, 
+         lc = Quality, lon = Longitude, lat = Latitude) 
 loc
 table(loc$id)
 

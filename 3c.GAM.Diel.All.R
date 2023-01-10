@@ -52,11 +52,13 @@ unique(lr$month)
 #########################
 hr <- readRDS("./RDATA/1b.daylength_depth_HR_5ids.RDS") %>%
   dplyr::select(-c(sunrise, sunset)) %>%
+  rename(date = date2) %>%
   mutate(month = as.numeric(substr(date, 6, 7))) %>%
   filter(month != "Jan")
 unique(hr$id)  # 5 ids
 names(lr)
 names(hr)
+hr = hr %>% relocate(date, .after="daylength")
 
 dat = rbind(lr, hr)
 length(unique(dat$id))            # 13 ids
@@ -80,10 +82,10 @@ corr[is.na(corr)] <- 0
 corr_p <- cor_pmat(cor_dat)
 corr_p[is.na(corr_p)] <- 1
 
-cor.test(dat$mean_dep, dat$daylength)   # -0.33
-cor.test(dat$median_dep, dat$daylength) # -0.32
+cor.test(dat$mean_dep, dat$daylength)   # -0.48
+cor.test(dat$median_dep, dat$daylength) # -0.56
 cor.test(dat$max_dep, dat$daylength)    # -0.31
-cor.test(dat$mean_dep, dat$month)       # 0.30
+cor.test(dat$mean_dep, dat$month)       # 0.48
 
 # display
 ggcorrplot(
@@ -130,19 +132,19 @@ ggpairs(data, title="Pairwise correlations between variables",
 
 
 #################################
-# GAM: meandep vs day length
+# GAM: depth vs day length
 #################################
 dat$id = as.factor(dat$id)
-system.time({ m = gam(mean_dep ~ s(daylength, k=4) + 
-                        s(id, bs = 're') +           # random intercept
+system.time({ m = gam(median_dep ~ s(daylength, k=4) + 
+                        s(id, bs = 're') +            # random intercept
                         s(daylength, id, bs = 're'),  # random slope
                       data = dat, method="REML") })
-summary(m)                     # meandep: 77%, mediandep: 71%, maxdep: 40%
+summary(m)   # meandep: 63%, mediandep: 52%, maxdep: 40%
 plot(m,pages=1, shade=T)
 as.numeric(performance::r2(m)) 
-# saveRDS(m, "./RDATA/4.GAM/GAM_output_daylength_meandep_slope_intercept_all.rds")
-# saveRDS(m, "./RDATA/4.GAM/GAM_output_daylength_mediandep_slope_intercept_all.rds")
-# saveRDS(m, "./RDATA/4.GAM/GAM_output_daylength_maxdep_slope_intercept_all.rds")
+# saveRDS(m, "./RDATA/3.GAM/GAM_output_daylength_meandep_slope_intercept_all.rds")
+# saveRDS(m, "./RDATA/3.GAM/GAM_output_daylength_maxdep_slope_intercept_all.rds")
+saveRDS(m, "./RDATA/3.GAM/GAM_output_daylength_mediandep_slope_intercept_all.rds")
 
 # residuals: better fit with mediandep
 # good fit but some spatial autocorrelation!
@@ -183,9 +185,9 @@ ind_pred <- ind_pred_inter %>%
   # trick to avoid calling twice this object in the console for display
   .[]
 ind_pred
-saveRDS(ind_pred, "./RDATA/4.GAM/Indiv-GAM_daylength_maxdep_slope_intercept_all.rds")
-# saveRDS(ind_pred, "./RDATA/4.GAM/Indiv-GAM_daylength_meandep_slope_intercept_all.rds")
-# saveRDS(ind_pred, "./RDATA/4.GAM/Indiv-GAM_daylength_mediandep_slope_intercept_all.rds")
+# saveRDS(ind_pred, "./RDATA/3.GAM/Indiv-GAM_daylength_meandep_slope_intercept_all.rds")
+# saveRDS(ind_pred, "./RDATA/3.GAM/Indiv-GAM_daylength_maxdep_slope_intercept_all.rds")
+saveRDS(ind_pred, "./RDATA/3.GAM/Indiv-GAM_daylength_mediandep_slope_intercept_all.rds")
 
 ggplot(ind_pred, aes(x = daylength, y = fit_ind)) +
   geom_line(aes(colour=id),lwd=1) +
@@ -227,9 +229,9 @@ pop_pred <- setDT(
   # trick to avoid calling twice this object in the console for display
   .[]
 pop_pred = as_tibble(pop_pred)
-saveRDS(pop_pred, "./RDATA/4.GAM/Pop-GAM_daylength_maxdep_slope_intercept_All.rds")
-# saveRDS(pop_pred, "./RDATA/4.GAM/Pop-GAM_daylength_meandep_slope_intercept_All.rds")
-# saveRDS(pop_pred, "./RDATA/4.GAM/Pop-GAM_daylength_mediandep_slope_intercept_All.rds")
+# saveRDS(pop_pred, "./RDATA/3.GAM/Pop-GAM_daylength_meandep_slope_intercept_All.rds")
+# saveRDS(pop_pred, "./RDATA/3.GAM/Pop-GAM_daylength_maxdep_slope_intercept_All.rds")
+saveRDS(pop_pred, "./RDATA/3.GAM/Pop-GAM_daylength_mediandep_slope_intercept_All.rds")
 
 
 # plot pop curve + SE
