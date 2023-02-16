@@ -15,21 +15,13 @@ library(magrittr)
 library(data.table)
 
 
-## PTT correspondence:
-#----------------------
-# SN 13A0471, PTT 27262
-# SN 14A0375, PTT 22849
-# SN 14A0376, PTT 22850
-# SN 14A0380, PTT 27262
-# SN 14A0384, PTT 93100
-
 
 
 
 ##################################
 # import data for the 5 porpoises
 ##################################
-setwd("/Users/philippinechambault/Documents/POST-DOC/2021/MSCA-GF/ANALYSES/HP/DATA/HP_Dive_data_2013-2016/")
+setwd("/Users/philippinechambault/Documents/POST-DOC/2021/MSCA-GF/ANALYSES/HP-Diel-Seasonal-Pattern/DATA/HP_Dive_data_2013-2016/")
 files = list.files(pattern=".csv")
 files # 5 files, different ID names
 
@@ -56,10 +48,9 @@ system.time({ # 77 sec
     hp = rbind(hp, id)
   }
 })
-
 hp
 unique(hp$id)
-
+str(hp)
 
 # convert dates into POSIX
 #--------------------------
@@ -109,167 +100,18 @@ ggplot(data = hp, aes(x=-depth)) +
 # SN 14A0384, PTT 93100, nloc: 790  (2014)
 hp = hp %>%
   mutate(id = case_when(id == "13A0471" ~ "27262",
-                         id == "14A0375" ~ "22849b",
-                         id == "14A0376" ~ "22850b",
-                         id == "14A0380" ~ "27262b",
-                         id == "14A0384" ~ "93100"))
+                        id == "14A0375" ~ "22849b",
+                        id == "14A0376" ~ "22850b",
+                        id == "14A0380" ~ "27262b",
+                        id == "14A0384" ~ "93100"))
 unique(hp$id)
 hp
 hp = hp %>% rename(posix_local = posix) %>% dplyr::select(-c(dateTime))
 str(hp)
 
-# setwd("/Users/philippinechambault/Documents/POST-DOC/2021/MSCA-GF/ANALYSES/HP")
-# saveRDS(hp,"./RDATA/1b.HP.Temp.RDS")
 
 
 
-
-
-
-##########################################################
-# Rolling join to extract coordinates from loc dataset
-##########################################################
-setwd("/Users/philippinechambault/Documents/POST-DOC/2021/MSCA-GF/ANALYSES/HP")
-
-# import locations for the 5 HP
-#----------------------------------
-loc <- readRDS("./RDATA/1a.locations_filtered_17HP.rds") %>% 
-  dplyr::select(id, posix_local, bathy, lon, lat)  %>%
-  filter(id == "27262" | id == "22849b" | id == "22850b" | 
-         id == "27262b" | id == "93100") %>%
-  rename(date = posix_local)
-unique(loc$id)
-unique(hp$id)
-names(loc)
-names(hp)
-hp = hp %>% rename(date2 = date, date = posix_local)
-
-# convert into data tables
-#-------------------------
-diveDT = setDT(hp)
-setkey(diveDT,id,date)
-locDT  = setDT(loc)
-setkey(locDT,id,date)
-
-# rolling join on date
-dive2 = locDT[,.(date, id, lon, lat)] %>%
-  .[diveDT, roll="nearest"] %>%
-  .[] # to display tibble
-summary(dive2$lon)
-summary(dive2$lat)
-names(dive2)
-
-
-# check correspondence
-#----------------------
-dive2 %>% filter(id == "27262") %>% dplyr::select(c(id, date, lon, lat))
-id = loc %>% filter(id == "27262") %>% View()
-
-
-dive2 -> hp
-rm(dive2)
-hp = as_tibble(hp)
-names(hp)
-hp = hp %>% rename(posix_local = date, date = date2) 
-
-
-
-
-
-
-
-
-
-########################################
-# distinguish phases of the day
-########################################
-
-# identify phases of the day based on coordinates and dates
-#-----------------------------------------------------------
-system.time({ # 104 sec
-  sun  = getSunlightTimes(data = hp, tz="America/Nuuk",  
-                          keep = c("sunrise","sunset","dusk",
-                                   "dawn","night","nightEnd"))  })
-head(sun)
-
-# check earlier and latest sunset and sunrise in 2014
-#-----------------------------------------------------
-# sun %>%
-#   mutate(year = substr(date, 1, 4)) %>%
-#   filter(year == "2014") %>%
-#   summarise(earliest_sunrise = min(sunrise),
-#             latest_sunrise   = max(sunrise),
-#             earliest_sunset  = max(sunset),
-#             latest_sunset    = min(sunset))
-#    earliest_sunrise      latest_sunrise     earliest_sunset       latest_sunset
-# 2014-07-17 03:29:43 2014-12-31 10:07:13 2014-12-31 14:53:18 2014-07-17 23:43:27
-
-# add columns to hp dataset
-#----------------------------
-hp2 = cbind(hp, sun[,c("sunrise","sunset","dusk",
-                       "dawn","night","nightEnd")]) %>%
-  as_tibble()
-names(hp2)
-
-
-# identify dusk, dawn, day, night
-#------------------------------------
-hp2 = hp2 %>%
-  mutate(period = case_when(posix_local %within% interval(sunset, night) ~ 'dusk',
-                            posix_local %within% interval(nightEnd, sunrise) ~ 'dawn',
-                            posix_local %within% interval(sunrise, sunset) ~ 'day',
-                            TRUE ~ "night"))
-table(hp2$period)
-unique(hp2$period)
-hp2 -> hp
-rm(hp2, diveDT, locDT, sun, files, id, i)
-
-
-# check dive depth for different periods
-#----------------------------------------
-hp %>%
-  group_by(period) %>%
-  summarise(meandep   = mean(depth, na.rm=T),
-            mediandep = median(depth, na.rm=T),
-            maxdep    = max(depth, na.rm=T)) %>%
-  ungroup()
-# period meandep mediandep maxdep
-# dawn      39.4      19.5 32727 
-# day       20.4       1.5 32728.
-# dusk      35.7       9.5 32728.
-# night     34.2      12.5 32728.
-hp = hp %>% mutate(hour = substr(posix_local, 12, 13))
-
-
-# remove depth outliers
-#--------------------------
-summary(hp$depth)
-hp = hp %>% filter(depth < 600)
-
-
-
-
-
-
-# ############################
-# # check data gaps
-# ############################
-# hp = hp %>%
-#   group_by(ptt) %>%
-#   # select(-c(dateTime, id, posix)) %>%
-#   mutate(difftime = c(NA,difftime(posix_local[2:n()], 
-#                                   posix_local[1:n()-1], units="sec")))
-# hp
-# summary(hp$difftime) # 1 to 375 sec !
-# hist(hp$difftime)
-# 
-# ggplot(hp, aes(x=difftime)) +
-#   geom_histogram() +
-#   facet_wrap(.~ptt) +
-#   labs(y="Dive counts", x="Time difference between observation (s)", 
-#        title ="", fill="") +
-#   theme_tq() +
-#   theme(legend.position = "none")
 
 
 
@@ -283,6 +125,11 @@ hp = hp %>% filter(depth < 600)
 ######################################
 # clean dataset: check depth outliers
 ######################################
+
+# remove depth outliers
+#--------------------------
+summary(hp$depth)  # starts at -40m and goes up to 32727.5 m !
+hp = hp %>% filter(depth < 600)
 
 # summarize dataset to 1 maxDep per day
 #--------------------------------------
@@ -311,14 +158,8 @@ ggplot(data = maxdep_daily, aes(x=date, y=-maxdep)) +
   theme_tq()
 
 
-
-
-
-
-
-########################################################
 # need to reset depth above 0 (some values below 0)
-########################################################
+#---------------------------------------------------
 # remove negative depth (above 3 m)
 nrow(hp[hp$depth < (-1.5),]) / nrow(hp )*100  # 0.4%
 hp = hp %>%
@@ -341,9 +182,13 @@ range(hp$day_depart)
 #-----------------------
 hp = hp[order(hp$id, hp$posix_local),]
 
-setwd("/Users/philippinechambault/Documents/POST-DOC/2021/MSCA-GF/ANALYSES/HP")
+setwd("/Users/philippinechambault/Documents/POST-DOC/2021/MSCA-GF/ANALYSES/HP-Diel-Seasonal-Pattern")
 saveRDS(hp, "./RDATA/1b.HP_dive_HR_Not_filtered.RDS")
 gc()
+
+
+
+
 
 
 
@@ -358,12 +203,13 @@ gc()
 # (D) descent, (DB) descent/bottom, (B) bottom, (BA) bottom/ascent, (A) ascent, 
 # (DA) descent/ascent (occurring when no bottom phase can be detected) and (X) non-dive (surface),
 ###################################################################################################
-setwd("/Users/philippinechambault/Documents/POST-DOC/2021/MSCA-GF/ANALYSES/HP")
+setwd("/Users/philippinechambault/Documents/POST-DOC/2021/MSCA-GF/ANALYSES/HP-Diel-Seasonal-Pattern")
 path = paste0("./Users/philippinechambault/Documents/POST-DOC/2021/MSCA-GF/",
-              "ANALYSES/HP/RDATA/1b.HP_dive_HR_Not_filtered.rds")
+              "ANALYSES/HP-Diel-Seasonal-Pattern/RDATA/1b.HP_dive_HR_Not_filtered.rds")
 str(hp)
 offset    = 0
 threshold = 5  # threshold depth below which an underwater phase should be considered a dive
+
 
 system.time({  
   # 14700 for 4 ids, threshold=5 m, offset=0
@@ -372,12 +218,12 @@ system.time({
     id = hp %>% 
       filter(id == unique(id)[i]) %>%
       rename(time = posix_local)
+    
     ptt = unique(id$id)
     id  = id %>%
       select(depth, time)
     id = id[order(id$time),]
     id = id[!duplicated(id$time),]
-      # select(-c(date, day, id, posix, period, hour))
     
     tdr   = createTDR(id$time, id$depth, file=path, speed=F)
     calib = calibrateDepth(tdr, dive.thr=threshold, 
@@ -401,10 +247,11 @@ system.time({
 #########################################################################
 # add dive number and phases to the hp dataset
 #########################################################################
+# hp <- readRDS("./RDATA/1b.HP_dive_HR_Not_filtered.RDS")
 offset    = 0
 threshold = 5 # threshold depth below which an underwater phase should be considered a dive
 zoc   = paste0("calib_",threshold,"m_zoc",offset)
-setwd(paste0("/Users/philippinechambault/Documents/POST-DOC/2021/MSCA-GF/ANALYSES/HP",
+setwd(paste0("/Users/philippinechambault/Documents/POST-DOC/2021/MSCA-GF/ANALYSES/HP-Diel-Seasonal-Pattern",
              "/RDATA/",zoc))
 files = list.files(pattern=paste0(zoc,".RDS"))
 files 
@@ -430,9 +277,26 @@ system.time({  # 60 sec
 })
 gc()
 unique(dive$id)
-rm(dive2, ptt, d, dat, maxdep_daily)
+rm(dive2, ptt, d, dat, path)
+
+# # check duplicated times
+# i = "93100"
+# id = dive %>%
+#   filter(id == i)
+# nrow(id[duplicated(id$posix_local),])
 
 
+
+
+
+
+
+
+
+
+##############################################
+# correct for remaining depth above 0
+##############################################
 
 #--------------------------------------------
 # proportion of dive above depth threshold?
@@ -469,9 +333,235 @@ ggplot(dive2[1:400,], aes(x=posix_local, y=-depth_cor, colour=activity)) +
   geom_path(group="activity") +
   ylim(-30,0)
 summary(dive2$depth_cor) # 0 to 361 m
-
 dive2 -> dive
 rm(dive2)
+names(dive)
+
+# replace depth by depth_cor
+dive = dive %>%
+  dplyr::select(-depth) %>%
+  rename(depth = depth_cor)
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+################################################
+# check duplicated rows
+# check coordinates: must have 1 per dive
+# to avoid having several sunset/sunrise per dive
+################################################
+# 7 22850b 2014-07-17 19:24:32 2014-07-17 19:25:41
+id = dive %>% filter(id == "22850b" & dive == 7) 
+# unique(id$sunrise) # 2 different sunrises!
+# unique(id$lon)     # 2 coordinates!
+# unique(id$lat)
+# library(maps)
+# plot(lat~lon, id, pch=19, xlim=c(-58,-49), ylim=c(60,70), cex=0.2)
+# map(add=T)
+
+
+# extract first depth of each dive/ID
+# to avoid having different coordinates for the same dive
+#--------------------------------------------------------
+first_dep = dive %>%
+  dplyr::select(posix_local, id, dive) %>%
+  filter(dive != 0) %>%   # remove surface times
+  group_by(id, dive) %>%
+  slice_head() %>%
+  mutate(first_dep = "yes") %>%
+  ungroup() 
+first_dep
+
+
+
+
+
+
+
+
+##########################################################
+# Rolling join to extract coordinates from loc dataset
+##########################################################
+
+# import locations for the 5 HP
+#----------------------------------
+setwd("/Users/philippinechambault/Documents/POST-DOC/2021/MSCA-GF/ANALYSES/HP-Diel-Seasonal-Pattern")
+loc <- readRDS("./RDATA/1a.locations_filtered_17HP.rds") %>% 
+  dplyr::select(id, posix_local, bathy, lon, lat, bathy, bathy_200)  %>%
+  # filter(unique(id) == unique(dive$id))
+  filter(id == "27262" | id == "22849b" | id == "22850b" | 
+           id == "27262b" | id == "93100") %>%
+  rename(date = posix_local)
+summary(loc$bathy_200)
+unique(loc$id)
+unique(first_dep$id)
+names(loc)
+names(first_dep)
+first_dep = first_dep %>% rename(date = posix_local)
+
+
+# convert into data tables
+#-------------------------
+diveDT = setDT(first_dep)
+setkey(diveDT,id,date)
+locDT  = setDT(loc)
+setkey(locDT,id,date)
+
+# rolling join on date
+dive2 = locDT[,.(date, id, lon, lat, bathy_200)] %>%
+  .[diveDT, roll="nearest"] %>%
+  .[] # to display tibble
+summary(dive2$lon)
+summary(loc$lon)
+
+summary(dive2$lat)
+summary(loc$lat)
+
+summary(dive2$bathy_200)
+names(first_dep)
+
+
+# check correspondence
+# ok BUT for some dives, several coordinates 
+# and therefore sunset/sunrise !!
+#--------------------------------------------
+dive2 %>% filter(id == "27262") %>% 
+  dplyr::select(c(id, date, lon, lat))
+id = loc %>% filter(id == "27262") %>% View()
+
+dive2 -> first_dep
+names(first_dep)
+rm(dive2)
+first_dep = as_tibble(first_dep)
+names(first_dep)
+first_dep = first_dep %>% rename(posix_local = date) 
+
+# join coordinates from first_dep to dive dataset
+#-------------------------------------------------
+names(dive)
+names(first_dep)
+dive2 = dive %>%
+  left_join(first_dep, by = c("id","posix_local","dive")) %>%
+  dplyr::select(-c(lon.y, lat.y, first_dep.y)) %>%
+  rename(first_dep = first_dep.x, lon = lon.x, lat = lat.x)
+names(dive2)
+dive2$first_dep[is.na(dive2$first_dep)] = "no"
+
+ 
+# assign coordinates an bathy to whole dive for each dive
+#--------------------------------------------------------
+dive2 = dive2 %>%
+  group_by(id, dive) %>%
+  mutate(lon = first(lon),
+         lat = first(lat),
+         bathy_200 = first(bathy_200))
+View(dive2)
+summary(dive2$bathy_200)  # NA when no dive, mean=253 m
+dive2 %>% filter(id == "22849b" & dive == 2) %>% View()
+dive2 -> dive
+rm(dive2)
+
+dive %>% filter(id == "27262" & dive == 1658) %>% View()
+
+
+# check coordinates
+#-------------------------------
+north_map = map_data("world") %>% group_by(group)
+shore     = north_map[north_map$region=="Greenland"
+                      | north_map$region=="Norway"
+                      | north_map$region=="Canada"
+                      | north_map$region=="Iceland",]
+ggplot(shore, aes(long, lat)) +
+  coord_map("azequidistant", xlim=c(-60,-30), ylim=c(55,80)) +
+  geom_polygon(aes(group=group), fill="white",lwd=0.1,colour="black") +
+  geom_point(data=dive[dive$first_dep=="yes",], aes(lon,lat), stroke=0, size=0.3) +
+  theme_tq() 
+
+sub = dive %>% filter(dive!=0 & first_dep=="yes")
+sub$bathy_class = cut(sub$bathy_200, breaks = c(0,50,150,500,2350))
+table(sub$bathy_class)
+ggplot(shore, aes(long, lat)) +
+  coord_map("azequidistant", xlim=c(-60,-30), ylim=c(55,80)) +
+  geom_polygon(aes(group=group), fill="white",lwd=0.1,colour="black") +
+  geom_point(data=sub, 
+             aes(lon,lat, colour=bathy_class), stroke=0, size=0.3) +
+  facet_wrap(~bathy_class) +
+  theme_tq() 
+
+ggplot(shore, aes(long, lat)) +
+  coord_map("azequidistant", xlim=c(-60,-30), ylim=c(55,80)) +
+  geom_polygon(aes(group=group), fill="white",lwd=0.1,colour="black") +
+  geom_point(data=dive[dive$first_dep=="yes",], 
+             aes(lon,lat,colour=id), stroke=0, size=0.3) +
+  facet_wrap(~id, ncol=3) +
+  theme_tq() 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+########################################
+# identify sunrises and sunsets
+########################################
+names(dive)
+
+# identify phases of the day based on coordinates and dates
+#-----------------------------------------------------------
+system.time({ # 104 sec
+  sun  = getSunlightTimes(data = dive[,c("date","lon","lat")], 
+                          tz   = "America/Nuuk",  
+                          keep = c("sunrise","sunset","dusk",
+                                   "dawn","night","nightEnd"))  })
+head(sun)
+gc()
+rm(locDT, first_dep, diveDT, dat)
+
+# add columns to hp dataset
+#----------------------------
+dive2 = cbind(dive, sun[,c("sunrise","sunset","dusk",
+                       "dawn","night","nightEnd")]) %>%
+  as_tibble()
+names(dive2)
+
+
+# identify dusk, dawn, day, night
+#------------------------------------
+dive2 = dive2 %>%
+  mutate(period = case_when(posix_local %within% interval(sunset, night) ~ 'dusk',
+                            posix_local %within% interval(nightEnd, sunrise) ~ 'dawn',
+                            posix_local %within% interval(sunrise, sunset) ~ 'day',
+                            TRUE ~ "night"))
+table(dive2$period)
+unique(dive2$period)
+dive2 -> dive
+rm(dive2, sun, files, id, i)
+dive = dive %>% mutate(hour = substr(posix_local, 12, 13))
+gc()
+
 
 
 
@@ -481,14 +571,12 @@ rm(dive2)
 
 
 ###################################
-# solar elevation 
+# add solar elevation 
 ###################################
 names(dive)
 
 # identify light regimes based on coordinates and dates
 #-----------------------------------------------------------
-colnames(dive)[6] = "date2"
-colnames(dive)[1] = "date" # rename so it matches function getSunlightPosition
 system.time({     # 6 sec
   sun  = getSunlightPosition(data = dive[,c("date","lon","lat")], # include date with times
                              keep = c("altitude"))  }) 
@@ -500,36 +588,15 @@ head(sun)
 #----------------------------------------------------------
 dive2 = bind_cols(dive, sun[,c("alt_deg")]) %>%
   mutate(twilight  = case_when(alt_deg > 0 ~ "Day",          
-                              alt_deg > (-6) & alt_deg < (0) ~ "Civil twilight",  
-                              alt_deg > (-12) & alt_deg < (-6) ~ "Nautical twilight", 
-                              alt_deg > (-18) & alt_deg < (-12) ~ "Astronomical twilight",
-                              alt_deg < (-18) ~ "Night"))                 
+                               alt_deg > (-6) & alt_deg < (0) ~ "Civil twilight",  
+                               alt_deg > (-12) & alt_deg < (-6) ~ "Nautical twilight", 
+                               alt_deg > (-18) & alt_deg < (-12) ~ "Astronomical twilight",
+                               alt_deg < (-18) ~ "Night"))                 
 names(dive2)
 table(dive2$twilight) / nrow(dive2) * 100
-# Astronomical twilight        Civil twilight                   Day 
-#              7.937112             10.401189             45.624594 
-# Nautical twilight                 Night 
-#          9.448185             26.588919
 dive2 -> dive
-
-# # save data
-# #--------------
-# saveRDS(dive, paste0("./RDATA/1b.dive_5HP_calib_",
-#                       threshold,"m_zoc",offset,".RDS"))
 gc()
 rm(dive2)
-
-
-
-
-
-
-
-
-
-
-
-
 
 
 
@@ -545,48 +612,47 @@ rm(dive2)
 # add columns asc_rate and desc_rate
 # (D) descent, (DB) descent/bottom, (B) bottom, (BA) bottom/ascent, (A) ascent
 ###############################################################################
-# dive <- readRDS("./RDATA/1b.dive_5HP_calib_5m_zoc0.RDS")
 names(dive)
-dive = dive %>% rename(posix_local = date, 
-                       date = date2)
+dive = dive %>% rename(date2 = date, posix_local = date)
 
-system.time({  # 85 sec
+system.time({  # 50 sec
 ndive_summary = dive %>%
-  filter(dive != 0) %>%           # remove surface times
+  filter(dive != 0) %>%   # remove surface times
   group_by(dive, id) %>% 
-  mutate(difftime = c(NA, diff(posix_local))) %>%
+  mutate(difftime = c(NA, diff(posix_local)),
+         diffdep  = c(NA, abs(diff(depth)))) %>% 
   summarise(start     = first(posix_local),
             end       = last(posix_local),
-            nobs      = n(),      # number of observations (depths) / dive
-            lon       = mean(lon),
-            lat       = mean(lat),
+            nobs      = n(),           # number of observations (depths) / dive
+            lon       = unique(lon),
+            lat       = unique(lat),
+            bathy_200 = unique(bathy_200),
             solar_alt = mean(alt_deg),
             twilight  = first(twilight),
             maxdep    = max(depth),
             mindep    = min(depth),
             meandep   = mean(depth),
             period    = first(period),
-            sunrise   = unique(sunrise),
-            sunset    = unique(sunset),
-            bot_dur   = sum(difftime[phase == "B"], na.rm=T),
-            asc_dur   = sum(difftime[phase == "A"], na.rm=T),
-            des_dur   = sum(difftime[phase == "D"], na.rm=T),
-            diff_dep  = mean(diff(depth)),
-            diff_dep_asc  = mean(diff(depth[phase == "A"])),
-            diff_dep_des  = mean(diff(depth[phase == "D"])),
-            diff_dep_bot  = mean(diff(depth[phase == "B"]))) %>%
-  mutate(dur      = as.numeric(difftime(end, start, units = "secs")),
-         vspeed   = abs(diff_dep / dur),  # vertical speed m/s
-         asc_rate = abs(diff_dep_asc / asc_dur),
-         des_rate = abs(diff_dep_des / des_dur),
-         bot_rate = abs(diff_dep_bot / bot_dur)) %>%
+            sunrise   = mean(sunrise), # for dives between 2 dates (around midnight)
+            sunset    = mean(sunset),  # for dives between 2 dates (around midnight)
+            bot_dur   = sum(difftime[phase == "B"], na.rm=T), # in sec
+            asc_dur   = sum(difftime[phase == "A"], na.rm=T), # in sec
+            des_dur   = sum(difftime[phase == "D"], na.rm=T), # in sec
+            asc_rate  = mean(diffdep[phase == "A"]/difftime[phase == "A"], na.rm=T),     # in m/s
+            des_rate  = mean(diffdep[phase == "D"]/difftime[phase == "D"], na.rm=T),
+            bot_rate  = mean(diffdep[phase == "B"]/difftime[phase == "B"], na.rm=T)) %>% # in m/s 
+  mutate(dur = as.numeric(difftime(end, start, units = "secs"))) %>% # in sec
   ungroup()
 })
 names(ndive_summary) 
-str(ndive_summary)
-dim(ndive_summary)      # 395 825 dives
-summary(ndive_summary)
 
+# check duplicated dives
+#-----------------------------
+nrow(ndive_summary %>% distinct(id, start, .keep_all = TRUE)) # 393 483
+ndive_summary %>% filter(duplicated(cbind(id, start))) # 0 
+str(ndive_summary)
+summary(ndive_summary)
+hist(ndive_summary$bathy_200, xlab = "Bathy (m)s")
 
 # check outliers (extreme duration)
 #------------------------------------
@@ -597,7 +663,7 @@ ndive_summary = ndive_summary %>% filter(dur < (7*60))
 # remove dives lasting 0 min
 #---------------------------
 ndive_summary %>% filter(dur == 0) %>% View()       # 16530 dives!
-ndive_summary = ndive_summary %>% filter(!dur == 0) # 379 289 dives left
+ndive_summary = ndive_summary %>% filter(!dur == 0) # 376 947 dives left
 
 # remove very short dives < 20 sec
 #---------------------------------
@@ -632,10 +698,11 @@ saveRDS(ndive_summary, paste0("./RDATA/1b.diveSummary_5HP_calib_",
 # remove outlier dives from full dataset (1 row=1 depth)
 # dives < 20 sec
 #########################################################
+names(dive)
 dive2 = ndive_summary %>%
   select(id, dive) %>%
   left_join(dive, by = c("id","dive"))
-dim(dive2) # 25 652 490 depths
+dim(dive2) # 25 337 344 depths
 setdiff(unique(dive2$dive), unique(ndive_summary$dive))
 dive2 %>%
   group_by(id) %>%
@@ -647,9 +714,9 @@ dive2 %>%
 # 27262b  61025
 # 93100   66372
 
-dive2 = dive2[order(dive2$id, dive2$date),]
+dive2 = dive2[order(dive2$id, dive2$posix_local),]
 ggplot(dive2[dive2$id=="27262" & dive2$dive==1,],
-       aes(x=date, y=-depth)) +
+       aes(x=posix_local, y=-depth)) +
   geom_point()
 
 # remove first dive of each ID (can be incomplete)
@@ -657,14 +724,21 @@ dive2 = dive2 %>%
   group_by(id) %>%
   filter(dive != 1) %>%
   ungroup()
-dim(dive2). # 25 652 362
+dim(dive2) # 25 337 216
 dive2 %>%
   group_by(id) %>%
   summarise(ndives = n_distinct(dive))
 
 dive2 -> dive
 rm(dive2)
+
+names(dive)
+dive = dive %>% 
+  select(-c(first_dep, dusk, dawn, night, nightEnd)) %>% 
+  rename(date2 = date, date = posix_local)
 saveRDS(dive, "./RDATA/1b.dive_5HP_calib_5m_zoc0.RDS")
+
+
 
 
 
@@ -722,14 +796,17 @@ saveRDS(dep_daily, "./RDATA/1b.dailyDepth_HR.RDS")
 ###########################################
 # calculate daylength per day and ID
 ###########################################
-# dive <- readRDS("./RDATA/1b.dive_5HP_calib_5m_zoc0.RDS")
 names(dive)
 daily = dive %>%
   filter(day_depart != 1) %>%  # remove first day because never complete (starts in the middle of day)
   group_by(id, date2) %>%
-  summarise(maxdep    = max(depth),
-            mediandep = median(depth),
-            meandep   = mean(depth))
+  summarise(maxdep     = max(depth),
+            mediandep  = median(depth),
+            meandep    = mean(depth),
+            mean_bathy = mean(bathy_200),
+            min_bathy  = min(bathy_200),
+            max_bathy  = max(bathy_200))
+daily
 
 # calculate daylength per day and ID
 #------------------------------------
@@ -771,424 +848,290 @@ saveRDS(daylength2, "./RDATA/1b.daylength_depth_HR_5ids.RDS")
 
 
 
-################
-# explo
-################
-nrow(ndive_summary[ndive_summary$dur<60,]) / nrow(ndive_summary) * 100  # 56%
-ndive_summary %>% 
-  filter(dur>5) %>%
-  dplyr::select(dive, id, dur, maxdep, start, end,
-         bot_dur, asc_rate, des_rate, bot_rate)
-hist(ndive_summary$dur)
-summary(ndive_summary$dur[ndive_summary$maxdep>100]) # 184 sec
-
-names(ndive_summary)
-nrow(ndive_summary[ndive_summary$maxdep>50,]) / nrow(ndive_summary) * 100  # 26%
-nrow(ndive_summary[ndive_summary$maxdep>100,]) / nrow(ndive_summary) * 100 # 13%
-
-
-
-
-#--------------------------------------
-# histograms of dive characteristics
-#--------------------------------------
-ggplot(data = ndive_summary, aes(x=dur/60, fill=period)) +
-  geom_density(aes(alpha=.4, colour=period)) +
-  labs(y = "Dive proba", x = "(min)", title = "Dive duration",fill="") +
-  scale_fill_brewer(palette = "Set2") +
-  scale_colour_brewer(palette = "Set2") +
-  theme_tq() +
-  facet_grid(period~id, scales="free_y") +
-  theme(legend.position = "none")
-
-ggplot(data = ndive_summary, aes(x=-maxdep, fill=period)) +
-  # geom_histogram() +
-  geom_density(aes(alpha=.4, colour=period)) +
-  labs(y = "Dive proba", x = "(m)", title = "Max dive depth",fill="") +
-  coord_flip() +
-  scale_fill_brewer(palette = "Set2") +
-  scale_colour_brewer(palette = "Set2") +
-  theme_tq() +
-  facet_grid(period~id, scales="free_y") +
-  theme(legend.position = "none")
-
-ggplot(data = ndive_summary[!is.na(ndive_summary$des_rate),], 
-       aes(x=des_rate, fill=period)) +
-  geom_density(aes(alpha=.4, colour=period)) +
-  labs(y = "Dive proba", x = "(m/s)", title = "Descent rate",fill="") +
-  scale_fill_brewer(palette = "Set2") +
-  scale_colour_brewer(palette = "Set2") +
-  theme_tq() +
-  facet_grid(period~id, scales="free_y") +
-  # xlim(0,2.55) +
-  # ylim(0,5010) +
-  theme(legend.position = "none")
-
-ggplot(data = ndive_summary[!is.na(ndive_summary$asc_rate),], 
-       aes(x=asc_rate, fill=period)) +
-  geom_density(aes(alpha=.4, colour=period)) +
-  labs(y = "Dive proba", x = "(m/s)", title = "Ascent rate",fill="") +
-  scale_fill_brewer(palette = "Set2") +
-  scale_colour_brewer(palette = "Set2") +
-  theme_tq() +
-  facet_grid(period~id, scales="free_y") +
-  theme(legend.position = "none")
-
-ggplot(data = ndive_summary[!is.na(ndive_summary$bot_dur),], 
-       aes(x=bot_dur/60, fill=period)) +
-  geom_density(aes(alpha=.4, colour=period)) +
-  labs(y = "Dive porba", x = "(min)", title = "Bottom time",fill="") +
-  scale_fill_brewer(palette = "Set2") +
-  scale_colour_brewer(palette = "Set2") +
-  theme_tq() +
-  facet_grid(period~id, scales="free_y") +
-  theme(legend.position = "none")
-
-# grid.arrange(a, b, c, d, e, ncol=2)
-
-
-
-
-
-#################################
-# geom_density maxdep/dur
-#################################
-# all dives
-#----------------
-ggplot(ndive_summary, aes(y = -maxdep, x = dur/60)) +
-  geom_density_2d_filled(contour_var = "ndensity",
-                         aes(colour = dive)) +
-  # scale_colour_distiller(palette = "Blues", direction = 1) +
-  facet_wrap(vars(id)) +
-  labs(x = "Dive duration (min)", y = "Dive depth (m)",
-       title = "All dives", fill="n dives \nprobability") +
-  theme_tq() +
-  theme(panel.spacing = unit(0, "lines"),
-        panel.border = element_rect(color = "white", fill = NA, size = 0.2), 
-        strip.background = element_rect(fill="steelblue4",size=0.2,
-                                        colour="white"),
-        strip.text = element_text(colour='white',size=10,face="bold",
-                                  margin=margin(0.1,0.1,0.1,0.1,"cm")),
-        axis.title = element_text(size=8, hjust=0.5),
-        legend.position = "bottom",
-        legend.key.size = unit(0.4,"line"),
-        legend.key.width = unit(0.2,"cm"),
-        legend.key.height = unit(0.2,"cm"),
-        legend.title = element_text(size=6),
-        legend.text = element_text(size=5),
-        legend.box.spacing = unit(0.1,'cm'),
-        legend.margin=margin(t=-0.0, unit='cm'),
-        legend.key = element_blank(),
-        axis.text  = element_text(size=7, hjust=0.5),
-        title = element_text(colour="black",size=10,face="bold"),
-        plot.title=element_text(size=10, vjust=0, hjust=0, colour="black"),
-        panel.background = element_blank(),
-        panel.grid.major = element_blank(),
-        plot.margin = unit(c(0.2,0.2,0.5,0.2),"cm"))  # t, r, b, l
-ggsave(paste0("./FIGURES/Depth_Profiles/calib_",
-              threshold,"m_zoc",offset,"/MaxDep_Dur_AllDives_5HP_",
-              threshold,"m_zoc",offset,".png"),
-       width=4.5,height=5,units="in",dpi=400)
-
-# deep dives > 50 m
-#-----------------------
-deep_dives = ndive_summary %>% filter(maxdep>=50)
-table(deep_dives$id)
-ggplot(deep_dives, aes(y = -maxdep, x = dur/60)) +
-  geom_density_2d_filled(contour_var = "ndensity",
-                         aes(colour = dive)) +
-  facet_wrap(vars(id)) +
-  ylim(-365,0) +
-  labs(x = "Dive duration (min)", y = "Dive depth (m)",
-       title = "Deep dives below 50 m", fill="n dives \nprobability") +
-  theme_tq() +
-  theme(panel.spacing = unit(0, "lines"),
-        panel.border = element_rect(color = "white", fill = NA, size = 0.2), 
-        strip.background = element_rect(fill="steelblue4",size=0.2,
-                                        colour="white"),
-        strip.text = element_text(colour='white',size=10,face="bold",
-                                  margin=margin(0.1,0.1,0.1,0.1,"cm")),
-        axis.title = element_text(size=8, hjust=0.5),
-        legend.position = "bottom",
-        legend.key.size = unit(0.4,"line"),
-        legend.key.width = unit(0.2,"cm"),
-        legend.key.height = unit(0.2,"cm"),
-        legend.title = element_text(size=6),
-        legend.text = element_text(size=5),
-        legend.box.spacing = unit(0.1,'cm'),
-        legend.margin=margin(t=-0.0, unit='cm'),
-        legend.key = element_blank(),
-        axis.text  = element_text(size=7, hjust=0.5),
-        title = element_text(colour="black",size=10,face="bold"),
-        plot.title=element_text(size=10, vjust=0, hjust=0, colour="black"),
-        panel.background = element_blank(),
-        panel.grid.major = element_blank(),
-        plot.margin = unit(c(0.2,0.2,0.5,0.2),"cm"))  # t, r, b, l
-ggsave(paste0("./FIGURES/Depth_Profiles/calib_",
-              threshold,"m_zoc",offset,"/MaxDep_Dur_Below50m_5HP_",
-              threshold,"m_zoc",offset,".png"),
-       width=4.5,height=5,units="in",dpi=400)
-
-
-# deep dives > 100 m
-#-----------------------
-deep_dives = ndive_summary %>% filter(maxdep>=100)
-table(deep_dives$id)
-ggplot(deep_dives, aes(y = -maxdep, x = dur/60)) +
-  geom_density_2d_filled(contour_var = "ndensity",
-                         aes(colour = dive)) +
-  facet_wrap(vars(id)) +
-  ylim(-365,0) +
-  labs(x = "Dive duration (min)", y = "Dive depth (m)",
-       title = "Deep dives below 100 m", fill="n dives \nprobability") +
-  theme_tq() +
-  theme(panel.spacing = unit(0, "lines"),
-        panel.border = element_rect(color = "white", fill = NA, size = 0.2), 
-        strip.background = element_rect(fill="steelblue4",size=0.2,
-                                        colour="white"),
-        strip.text = element_text(colour='white',size=10,face="bold",
-                                  margin=margin(0.1,0.1,0.1,0.1,"cm")),
-        axis.title = element_text(size=8, hjust=0.5),
-        legend.position = "bottom",
-        legend.key.size = unit(0.4,"line"),
-        legend.key.width = unit(0.2,"cm"),
-        legend.key.height = unit(0.2,"cm"),
-        legend.title = element_text(size=6),
-        legend.text = element_text(size=5),
-        legend.box.spacing = unit(0.1,'cm'),
-        legend.margin=margin(t=-0.0, unit='cm'),
-        legend.key = element_blank(),
-        axis.text  = element_text(size=7, hjust=0.5),
-        title = element_text(colour="black",size=10,face="bold"),
-        plot.title=element_text(size=10, vjust=0, hjust=0, colour="black"),
-        panel.background = element_blank(),
-        panel.grid.major = element_blank(),
-        plot.margin = unit(c(0.2,0.2,0.5,0.2),"cm"))  # t, r, b, l
-ggsave(paste0("./FIGURES/Depth_Profiles/calib_",
-              threshold,"m_zoc",offset,"/MaxDep_Dur_Below100m_5HP_",
-              threshold,"m_zoc",offset,".png"),
-       width=4.5,height=5,units="in",dpi=400)
-
-
-
-
-
-
-# plot daily dive depth according to time of the day
-#--------------------------------------------------
-# Summarize data per id: extract daily max depth
-maxdep_daily = hp %>%
-  group_by(id, date, hour) %>%
-  summarise(period    = first(period),
-            maxdep    = max(depth, na.rm=T),
-            mindep    = min(depth, na.rm=T),
-            meandep   = mean(depth, na.rm=T),
-            mediandep = median(depth, na.rm=T)) %>%
-  ungroup()
-
-ggplot(maxdep_daily, aes(x=as.factor(hour), y=-mediandep, colour=id)) +
-  geom_boxplot() +
-  facet_wrap(.~ id) +
-  theme_tq() +
-  theme(legend.position = "none") 
-
-
-
-# histogram of daily depth per hour of the day
-#----------------------------------------------
-maxdep_hourly = hp %>%
-  group_by(id, date, hour) %>%
-  summarise(period    = first(period),
-            maxdep    = max(depth, na.rm=T),
-            mindep    = min(depth, na.rm=T),
-            meandep   = mean(depth, na.rm=T),
-            mediandep = median(depth, na.rm=T)) %>%
-  ungroup()
-maxdep_hourly$hour = as.factor(maxdep_hourly$hour)
-
-ggplot(maxdep_hourly, aes(x=hour, y=maxdep, colour = period)) +
-  geom_point() +
-  scale_colour_brewer(palette = "Blues") +
-  scale_y_continuous(trans = "reverse") +
-  labs(x="Hours of the day", y="Daily max depth (m)",
-       title ="Diel pattern from max depth (daily)", colour="") +
-  theme_tq() +
-  theme(legend.position = "bottom")
-
-
-
-
-
-
-# density plot of max depth (day vs night)
-#---------------------------------------------
-ggplot(maxdep_hourly, aes(x=maxdep, fill = period, colour = period)) +
-  geom_density(aes(y=..scaled..,alpha=.4)) +
-  coord_flip() +
-  scale_x_continuous(trans = "reverse") +
-  scale_fill_brewer(palette = "Set2") +
-  scale_colour_brewer(palette = "Set2") +
-  facet_grid(id~period) +
-  labs(y="Dive density", x="Daily max depth (m)", 
-       title ="Diel pattern from max depth (daily)", fill="") +
-  theme_tq() +
-  theme(legend.position = "none")
-ggsave(paste0("./FIGURES/Dive_diel_pattern/Histo_DailyMaxDep_period.png"),
-       width=6,height=5,units="in",dpi=400)
-
-ggplot(maxdep_hourly, aes(y = maxdep, x = as.numeric(hour), colour = id)) +
-  geom_smooth(method="gam", lwd = 0.5) +
-  scale_y_continuous(trans = "reverse") +
-  ylim(365, 0) +
-  facet_grid(.~id) +
-  labs(x="Hour", y="Daily max depth (m)", 
-       title ="Diel pattern from max depth (daily)", fill="") +
-  theme_tq()
-ggsave(paste0("./FIGURES/Dive_diel_pattern/geomSmooth_DailyMaxDep_hour.png"),
-       width=7,height=3,units="in",dpi=400)
-
-ggplot(maxdep_hourly, aes(y = maxdep, x = hour, colour = id)) +
-  geom_boxplot() +
-  scale_y_continuous(trans = "reverse") +
-  ylim(365, 0) +
-  facet_wrap(.~id) +
-  labs(x="Hour", y="Daily max depth (m)", 
-       title ="Diel pattern from max depth (daily)", fill="") +
-  theme_tq()
-
-
-
-
-# #------------------------------------
-# # plot depth vs time
+# ################
+# # explo
+# ################
+# nrow(ndive_summary[ndive_summary$dur<60,]) / nrow(ndive_summary) * 100  # 32%
+# ndive_summary %>% 
+#   filter(dur>5) %>%
+#   dplyr::select(dive, id, dur, maxdep, start, end,
+#          bot_dur, asc_rate, des_rate, bot_rate)
+# hist(ndive_summary$dur)
+# summary(ndive_summary$dur[ndive_summary$maxdep>100]) # 184 sec
+# 
+# names(ndive_summary)
+# nrow(ndive_summary[ndive_summary$maxdep>50,]) / nrow(ndive_summary) * 100  # 40%
+# nrow(ndive_summary[ndive_summary$maxdep>100,]) / nrow(ndive_summary) * 100 # 21%
+# 
+# 
+# 
+# 
 # #--------------------------------------
-# system.time({ 
-#   for (ptt in unique(dive$id)) { 
-#     id  = dive %>% filter(id == ptt)
-#     seq = seq(1, max(id$dive), by=20)
-#     
-#     for (i in 1:length(seq)) { 
-#       start = seq[i]
-#       end   = seq[i+1]
-#       d     = id %>% 
-#         filter(dive >= start & dive < end)
-#       
-#       surf_dive = id %>% filter(posix_local >= first(d$posix_local) 
-#                                 & posix_local < last(d$posix_local) & dive == 0)
-#       # d = d %>%
-#       #   left_join(surf_dive, by = "posix_local")
-#       
-#       ggplot(data = d, aes(x=posix_local, y=-depth, colour=phase)) +
-#         geom_path(group="phase", size=0.6) +
-#         geom_path(data = surf_dive, aes(x=posix_local, y=-depth), 
-#                   group="phase", size=0.6) +
-#         labs(y = "Depth (m)", x = "", fill = "",
-#              title = paste0(ptt, ": ", first(d$date)), 
-#              subtitle = paste0("dive N°",start," to ", end)) +
-#         theme_tq() +
-#         geom_hline(yintercept = 0) +
-#         geom_hline(yintercept = -5, colour="blue", lty=2) +
-#         scale_color_brewer(palette="Set2") +
-#         theme(legend.position = "bottom")
-#       
-#       ggsave(paste0("./FIGURES/Depth_Profiles/calib_",
-#                     threshold,"m_zoc",offset,"/",unique(id$id),
-#                     "/DiveProfile_calib",threshold,
-#                     "m_zoc",offset,"_",
-#                     unique(id$id),"_dive",start,"to", end,".png"),
-#              width=5,height=4,units="in",dpi=400)
-#     }
-#   }
-# })
-# 
-# 
-# 
-# 
-# 
-# 
-# 
-# ###################################################
-# # extract statistics for each dive
-# # post_dive surface interval for each dive
-# # careful: surf intervals based on threshold >5 m
-# ###################################################
-# i = 1
-# dcalib = readRDS(files[i])
-# stat   = diveStats(dcalib) %>% as_tibble()
-# View(stat)
-# names(stat)
-# summary(stat$divetim/60)
-# dim(stat)
-# 
-# dat = dive %>% 
-#   filter(id == "27262") 
-# # slice_head(n=10) 
-# range(dat$dive)
-# summary(stat$postdive.dur)
-# 
-# ggplot(stat, aes(x=divetim/60, y=postdive.dur/60)) +
-#   geom_point(size = 0.2, aes(colour = maxdep)) +
+# # histograms of dive characteristics
+# #--------------------------------------
+# ggplot(data = ndive_summary, aes(x=dur/60, fill=period)) +
+#   geom_density(aes(alpha=.4, colour=period)) +
+#   labs(y = "Dive proba", x = "(min)", title = "Dive duration",fill="") +
+#   scale_fill_brewer(palette = "Set2") +
+#   scale_colour_brewer(palette = "Set2") +
 #   theme_tq() +
-#   scale_colour_continuous(type = "viridis", direction = -1) +
-#   labs(x = "dive duration (min)", y = "post-dive duration (min)") +
-#   geom_smooth(method = "gam", colour="red", se=F, lwd=0.5)
+#   facet_grid(period~id, scales="free_y") +
+#   theme(legend.position = "none")
 # 
-# # some very long post-dive surf intervals 
-# # likely due to zoc and dive threshold of 5 m
-# #-----------------------------------------------------------
-# # outliers = stat %>% 
-# #   filter(postdive.dur > 5*50) %>% 
-# #   View()
-# ggplot(stat[stat$postdive.dur,], 
-#        aes(x=postdive.dur/60)) +
-#   geom_bar(binwidth = 2, stat = "bin",fill="grey",colour="blue")
-# 
-# ggplot(stat[stat$postdive.dur<(10*60),], 
-#        aes(x=divetim/60, y=postdive.dur/60)) +
-#   geom_point(size = 0.2, aes(colour = maxdep)) +
+# ggplot(data = ndive_summary, aes(x=-maxdep, fill=period)) +
+#   # geom_histogram() +
+#   geom_density(aes(alpha=.4, colour=period)) +
+#   labs(y = "Dive proba", x = "(m)", title = "Max dive depth",fill="") +
+#   coord_flip() +
+#   scale_fill_brewer(palette = "Set2") +
+#   scale_colour_brewer(palette = "Set2") +
 #   theme_tq() +
-#   ylim(0,20) +
-#   scale_colour_continuous(type = "viridis", direction = -1) +
-#   labs(x = "dive duration (min)", y = "post-dive duration (min)") +
-#   geom_smooth(method = "gam", colour="red", se=F, lwd=0.5)
+#   facet_grid(period~id, scales="free_y") +
+#   theme(legend.position = "none")
 # 
-# ggplot(stat[stat$postdive.dur<(10*60),], 
-#        aes(x=divetim/60, y=postdive.dur/60)) +
-#   geom_point(size = 0.2, aes(colour = desctim)) +
+# ggplot(data = ndive_summary[!is.na(ndive_summary$des_rate),], 
+#        aes(x=des_rate, fill=period)) +
+#   geom_density(aes(alpha=.4, colour=period)) +
+#   labs(y = "Dive proba", x = "(m/s)", title = "Descent rate",fill="") +
+#   scale_fill_brewer(palette = "Set2") +
+#   scale_colour_brewer(palette = "Set2") +
 #   theme_tq() +
-#   ylim(0,20) +
-#   scale_colour_continuous(type = "viridis", direction = -1) +
-#   labs(x = "dive duration (min)", y = "post-dive duration (min)") +
-#   geom_smooth(method = "gam", colour="red", se=F, lwd=0.5)
+#   facet_grid(period~id, scales="free_y") +
+#   # xlim(0,2.55) +
+#   # ylim(0,5010) +
+#   theme(legend.position = "none")
 # 
-# 
-# ggplot(stat[stat$postdive.dur<(10*60),], 
-#        aes(x=postdive.dur/60, y=-maxdep)) +
-#   geom_point(size = 0.2, aes(colour = divetim)) +
+# ggplot(data = ndive_summary[!is.na(ndive_summary$asc_rate),], 
+#        aes(x=asc_rate, fill=period)) +
+#   geom_density(aes(alpha=.4, colour=period)) +
+#   labs(y = "Dive proba", x = "(m/s)", title = "Ascent rate",fill="") +
+#   scale_fill_brewer(palette = "Set2") +
+#   scale_colour_brewer(palette = "Set2") +
 #   theme_tq() +
-#   scale_colour_continuous(type = "viridis", direction = -1) +
-#   labs(y = "max depth (m)", x = "post-dive duration (min)") +
-#   geom_smooth(method = "gam", colour="red", se=F, lwd=0.5)
-#        
-# dat = dive[340:718,]
-# ggplot(dat, aes(x=posix_local, y=-depth_cor, colour=as.factor(dive))) +
-#   geom_path(group="activity") 
-# dat %>% 
-#   filter(dive!=0) %>%
-#   group_by(dive) %>%
-#   summarise(start = first(posix_local),
-#             end   = last(posix_local),
-#             maxdep = max(depth)) %>%
-#   mutate(dur = difftime(end, start, units = "mins")) 
-# dat %>%
-#   dplyr::select(id, depth, depth_cor, posix_local, dive, activity, phase) %>%
-#   View()
-              
-              
-              
-
-
-
+#   facet_grid(period~id, scales="free_y") +
+#   theme(legend.position = "none")
+# 
+# ggplot(data = ndive_summary[!is.na(ndive_summary$bot_dur),], 
+#        aes(x=bot_dur/60, fill=period)) +
+#   geom_density(aes(alpha=.4, colour=period)) +
+#   labs(y = "Dive porba", x = "(min)", title = "Bottom time",fill="") +
+#   scale_fill_brewer(palette = "Set2") +
+#   scale_colour_brewer(palette = "Set2") +
+#   theme_tq() +
+#   facet_grid(period~id, scales="free_y") +
+#   theme(legend.position = "none")
+# 
+# # grid.arrange(a, b, c, d, e, ncol=2)
+# 
+# 
+# 
+# 
+# 
+# #################################
+# # geom_density maxdep/dur
+# #################################
+# # all dives
+# #----------------
+# ggplot(ndive_summary, aes(y = -maxdep, x = dur/60)) +
+#   geom_density_2d_filled(contour_var = "ndensity",
+#                          aes(colour = dive)) +
+#   # scale_colour_distiller(palette = "Blues", direction = 1) +
+#   facet_wrap(vars(id)) +
+#   labs(x = "Dive duration (min)", y = "Dive depth (m)",
+#        title = "All dives", fill="n dives \nprobability") +
+#   theme_tq() +
+#   theme(panel.spacing = unit(0, "lines"),
+#         panel.border = element_rect(color = "white", fill = NA, size = 0.2), 
+#         strip.background = element_rect(fill="steelblue4",size=0.2,
+#                                         colour="white"),
+#         strip.text = element_text(colour='white',size=10,face="bold",
+#                                   margin=margin(0.1,0.1,0.1,0.1,"cm")),
+#         axis.title = element_text(size=8, hjust=0.5),
+#         legend.position = "bottom",
+#         legend.key.size = unit(0.4,"line"),
+#         legend.key.width = unit(0.2,"cm"),
+#         legend.key.height = unit(0.2,"cm"),
+#         legend.title = element_text(size=6),
+#         legend.text = element_text(size=5),
+#         legend.box.spacing = unit(0.1,'cm'),
+#         legend.margin=margin(t=-0.0, unit='cm'),
+#         legend.key = element_blank(),
+#         axis.text  = element_text(size=7, hjust=0.5),
+#         title = element_text(colour="black",size=10,face="bold"),
+#         plot.title=element_text(size=10, vjust=0, hjust=0, colour="black"),
+#         panel.background = element_blank(),
+#         panel.grid.major = element_blank(),
+#         plot.margin = unit(c(0.2,0.2,0.5,0.2),"cm"))  # t, r, b, l
+# ggsave(paste0("./FIGURES/Depth_Profiles/calib_",
+#               threshold,"m_zoc",offset,"/MaxDep_Dur_AllDives_5HP_",
+#               threshold,"m_zoc",offset,".png"),
+#        width=4.5,height=5,units="in",dpi=400)
+# 
+# # deep dives > 50 m
+# #-----------------------
+# deep_dives = ndive_summary %>% filter(maxdep>=50)
+# table(deep_dives$id)
+# ggplot(deep_dives, aes(y = -maxdep, x = dur/60)) +
+#   geom_density_2d_filled(contour_var = "ndensity",
+#                          aes(colour = dive)) +
+#   facet_wrap(vars(id)) +
+#   ylim(-365,0) +
+#   labs(x = "Dive duration (min)", y = "Dive depth (m)",
+#        title = "Deep dives below 50 m", fill="n dives \nprobability") +
+#   theme_tq() +
+#   theme(panel.spacing = unit(0, "lines"),
+#         panel.border = element_rect(color = "white", fill = NA, size = 0.2), 
+#         strip.background = element_rect(fill="steelblue4",size=0.2,
+#                                         colour="white"),
+#         strip.text = element_text(colour='white',size=10,face="bold",
+#                                   margin=margin(0.1,0.1,0.1,0.1,"cm")),
+#         axis.title = element_text(size=8, hjust=0.5),
+#         legend.position = "bottom",
+#         legend.key.size = unit(0.4,"line"),
+#         legend.key.width = unit(0.2,"cm"),
+#         legend.key.height = unit(0.2,"cm"),
+#         legend.title = element_text(size=6),
+#         legend.text = element_text(size=5),
+#         legend.box.spacing = unit(0.1,'cm'),
+#         legend.margin=margin(t=-0.0, unit='cm'),
+#         legend.key = element_blank(),
+#         axis.text  = element_text(size=7, hjust=0.5),
+#         title = element_text(colour="black",size=10,face="bold"),
+#         plot.title=element_text(size=10, vjust=0, hjust=0, colour="black"),
+#         panel.background = element_blank(),
+#         panel.grid.major = element_blank(),
+#         plot.margin = unit(c(0.2,0.2,0.5,0.2),"cm"))  # t, r, b, l
+# ggsave(paste0("./FIGURES/Depth_Profiles/calib_",
+#               threshold,"m_zoc",offset,"/MaxDep_Dur_Below50m_5HP_",
+#               threshold,"m_zoc",offset,".png"),
+#        width=4.5,height=5,units="in",dpi=400)
+# 
+# 
+# # deep dives > 100 m
+# #-----------------------
+# deep_dives = ndive_summary %>% filter(maxdep>=100)
+# table(deep_dives$id)
+# ggplot(deep_dives, aes(y = -maxdep, x = dur/60)) +
+#   geom_density_2d_filled(contour_var = "ndensity",
+#                          aes(colour = dive)) +
+#   facet_wrap(vars(id)) +
+#   ylim(-365,0) +
+#   labs(x = "Dive duration (min)", y = "Dive depth (m)",
+#        title = "Deep dives below 100 m", fill="n dives \nprobability") +
+#   theme_tq() +
+#   theme(panel.spacing = unit(0, "lines"),
+#         panel.border = element_rect(color = "white", fill = NA, size = 0.2), 
+#         strip.background = element_rect(fill="steelblue4",size=0.2,
+#                                         colour="white"),
+#         strip.text = element_text(colour='white',size=10,face="bold",
+#                                   margin=margin(0.1,0.1,0.1,0.1,"cm")),
+#         axis.title = element_text(size=8, hjust=0.5),
+#         legend.position = "bottom",
+#         legend.key.size = unit(0.4,"line"),
+#         legend.key.width = unit(0.2,"cm"),
+#         legend.key.height = unit(0.2,"cm"),
+#         legend.title = element_text(size=6),
+#         legend.text = element_text(size=5),
+#         legend.box.spacing = unit(0.1,'cm'),
+#         legend.margin=margin(t=-0.0, unit='cm'),
+#         legend.key = element_blank(),
+#         axis.text  = element_text(size=7, hjust=0.5),
+#         title = element_text(colour="black",size=10,face="bold"),
+#         plot.title=element_text(size=10, vjust=0, hjust=0, colour="black"),
+#         panel.background = element_blank(),
+#         panel.grid.major = element_blank(),
+#         plot.margin = unit(c(0.2,0.2,0.5,0.2),"cm"))  # t, r, b, l
+# ggsave(paste0("./FIGURES/Depth_Profiles/calib_",
+#               threshold,"m_zoc",offset,"/MaxDep_Dur_Below100m_5HP_",
+#               threshold,"m_zoc",offset,".png"),
+#        width=4.5,height=5,units="in",dpi=400)
+# 
+# 
+# 
+# 
+# 
+# 
+# # plot daily dive depth according to time of the day
+# #--------------------------------------------------
+# # Summarize data per id: extract daily max depth
+# maxdep_daily = hp %>%
+#   group_by(id, date, hour) %>%
+#   summarise(period    = first(period),
+#             maxdep    = max(depth, na.rm=T),
+#             mindep    = min(depth, na.rm=T),
+#             meandep   = mean(depth, na.rm=T),
+#             mediandep = median(depth, na.rm=T)) %>%
+#   ungroup()
+# 
+# ggplot(maxdep_daily, aes(x=as.factor(hour), y=-mediandep, colour=id)) +
+#   geom_boxplot() +
+#   facet_wrap(.~ id) +
+#   theme_tq() +
+#   theme(legend.position = "none") 
+# 
+# 
+# 
+# # histogram of daily depth per hour of the day
+# #----------------------------------------------
+# maxdep_hourly = hp %>%
+#   group_by(id, date, hour) %>%
+#   summarise(period    = first(period),
+#             maxdep    = max(depth, na.rm=T),
+#             mindep    = min(depth, na.rm=T),
+#             meandep   = mean(depth, na.rm=T),
+#             mediandep = median(depth, na.rm=T)) %>%
+#   ungroup()
+# maxdep_hourly$hour = as.factor(maxdep_hourly$hour)
+# 
+# ggplot(maxdep_hourly, aes(x=hour, y=maxdep, colour = period)) +
+#   geom_point() +
+#   scale_colour_brewer(palette = "Blues") +
+#   scale_y_continuous(trans = "reverse") +
+#   labs(x="Hours of the day", y="Daily max depth (m)",
+#        title ="Diel pattern from max depth (daily)", colour="") +
+#   theme_tq() +
+#   theme(legend.position = "bottom")
+# 
+# 
+# 
+# 
+# 
+# 
+# # density plot of max depth (day vs night)
+# #---------------------------------------------
+# ggplot(maxdep_hourly, aes(x=maxdep, fill = period, colour = period)) +
+#   geom_density(aes(y=..scaled..,alpha=.4)) +
+#   coord_flip() +
+#   scale_x_continuous(trans = "reverse") +
+#   scale_fill_brewer(palette = "Set2") +
+#   scale_colour_brewer(palette = "Set2") +
+#   facet_grid(id~period) +
+#   labs(y="Dive density", x="Daily max depth (m)", 
+#        title ="Diel pattern from max depth (daily)", fill="") +
+#   theme_tq() +
+#   theme(legend.position = "none")
+# ggsave(paste0("./FIGURES/Dive_diel_pattern/Histo_DailyMaxDep_period.png"),
+#        width=6,height=5,units="in",dpi=400)
+# 
+# ggplot(maxdep_hourly, aes(y = maxdep, x = as.numeric(hour), colour = id)) +
+#   geom_smooth(method="gam", lwd = 0.5) +
+#   scale_y_continuous(trans = "reverse") +
+#   ylim(365, 0) +
+#   facet_grid(.~id) +
+#   labs(x="Hour", y="Daily max depth (m)", 
+#        title ="Diel pattern from max depth (daily)", fill="") +
+#   theme_tq()
+# ggsave(paste0("./FIGURES/Dive_diel_pattern/geomSmooth_DailyMaxDep_hour.png"),
+#        width=7,height=3,units="in",dpi=400)
+# 
+# ggplot(maxdep_hourly, aes(y = maxdep, x = hour, colour = id)) +
+#   geom_boxplot() +
+#   scale_y_continuous(trans = "reverse") +
+#   ylim(365, 0) +
+#   facet_wrap(.~id) +
+#   labs(x="Hour", y="Daily max depth (m)", 
+#        title ="Diel pattern from max depth (daily)", fill="") +
+#   theme_tq()
 
 
 

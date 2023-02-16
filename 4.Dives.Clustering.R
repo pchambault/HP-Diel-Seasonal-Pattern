@@ -247,6 +247,7 @@ d = ggplot(clust, aes(x=cluster, y=des_rate, fill=cluster)) +
   labs(x="Clusters", y="(m/s)", title="Descent rate") +
   scale_fill_brewer(palette = "PiYG") +
   theme_tq()  +
+  ylim(0,7.5) +
   theme(legend.position = "none")
 
 e = ggplot(clust, aes(x=cluster, y=asc_rate, fill=cluster)) +

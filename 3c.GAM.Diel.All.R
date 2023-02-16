@@ -63,7 +63,7 @@ hr = hr %>% relocate(date, .after="daylength")
 dat = rbind(lr, hr)
 length(unique(dat$id))            # 13 ids
 summary(dat$daylength)
-dat = dat[!is.na(dat$daylength),] # 1479 obs
+dat = dat[!is.na(dat$daylength),] # 1471 obs
 table(dat$id)
 summary(dat)
 
@@ -135,16 +135,16 @@ ggpairs(data, title="Pairwise correlations between variables",
 # GAM: depth vs day length
 #################################
 dat$id = as.factor(dat$id)
-system.time({ m = gam(median_dep ~ s(daylength, k=4) + 
+system.time({ m = gam(max_dep ~ s(daylength, k=4) + 
                         s(id, bs = 're') +            # random intercept
                         s(daylength, id, bs = 're'),  # random slope
                       data = dat, method="REML") })
-summary(m)   # meandep: 63%, mediandep: 52%, maxdep: 40%
+summary(m)   # meandep: 64%, mediandep: 53%, maxdep: 40%
 plot(m,pages=1, shade=T)
 as.numeric(performance::r2(m)) 
 # saveRDS(m, "./RDATA/3.GAM/GAM_output_daylength_meandep_slope_intercept_all.rds")
-# saveRDS(m, "./RDATA/3.GAM/GAM_output_daylength_maxdep_slope_intercept_all.rds")
-saveRDS(m, "./RDATA/3.GAM/GAM_output_daylength_mediandep_slope_intercept_all.rds")
+saveRDS(m, "./RDATA/3.GAM/GAM_output_daylength_maxdep_slope_intercept_all.rds")
+# saveRDS(m, "./RDATA/3.GAM/GAM_output_daylength_mediandep_slope_intercept_all.rds")
 
 # residuals: better fit with mediandep
 # good fit but some spatial autocorrelation!
@@ -186,8 +186,8 @@ ind_pred <- ind_pred_inter %>%
   .[]
 ind_pred
 # saveRDS(ind_pred, "./RDATA/3.GAM/Indiv-GAM_daylength_meandep_slope_intercept_all.rds")
-# saveRDS(ind_pred, "./RDATA/3.GAM/Indiv-GAM_daylength_maxdep_slope_intercept_all.rds")
-saveRDS(ind_pred, "./RDATA/3.GAM/Indiv-GAM_daylength_mediandep_slope_intercept_all.rds")
+saveRDS(ind_pred, "./RDATA/3.GAM/Indiv-GAM_daylength_maxdep_slope_intercept_all.rds")
+# saveRDS(ind_pred, "./RDATA/3.GAM/Indiv-GAM_daylength_mediandep_slope_intercept_all.rds")
 
 ggplot(ind_pred, aes(x = daylength, y = fit_ind)) +
   geom_line(aes(colour=id),lwd=1) +
@@ -230,8 +230,8 @@ pop_pred <- setDT(
   .[]
 pop_pred = as_tibble(pop_pred)
 # saveRDS(pop_pred, "./RDATA/3.GAM/Pop-GAM_daylength_meandep_slope_intercept_All.rds")
-# saveRDS(pop_pred, "./RDATA/3.GAM/Pop-GAM_daylength_maxdep_slope_intercept_All.rds")
-saveRDS(pop_pred, "./RDATA/3.GAM/Pop-GAM_daylength_mediandep_slope_intercept_All.rds")
+saveRDS(pop_pred, "./RDATA/3.GAM/Pop-GAM_daylength_maxdep_slope_intercept_All.rds")
+# saveRDS(pop_pred, "./RDATA/3.GAM/Pop-GAM_daylength_mediandep_slope_intercept_All.rds")
 
 
 # plot pop curve + SE

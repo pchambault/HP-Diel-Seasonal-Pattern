@@ -44,8 +44,8 @@ corr_p <- cor_pmat(cor_dat)
 # replace NA value by 0
 corr_p[is.na(corr_p)] <- 1
 
-cor.test(cor_dat$mean_dep, cor_dat$daylength)
-cor.test(cor_dat$median_dep, cor_dat$daylength)
+cor.test(cor_dat$mean_dep, cor_dat$daylength)   # -0.78
+cor.test(cor_dat$median_dep, cor_dat$daylength) # -0.76
 
 # display
 ggcorrplot(
@@ -369,6 +369,41 @@ ggplot(pred, aes(x = month, y = hour)) +
 
 
 
+
+
+
+
+
+
+
+
+
+
+###############################################
+# GAM: maxdep ~ solar_alt (at the dive level)
+###############################################
+dive <- readRDS("./RDATA/1b.diveSummary_5HP_calib_5m_zoc0.RDS")
+dive
+dive$id = as.factor(dive$id)
+system.time({ # 20 sec
+  m = gam(maxdep ~ s(solar_alt, k=5) + 
+            s(id, bs = 're') +            # random intercept
+            s(solar_alt, id, bs = 're'),  # random slope
+          data = dive, method="REML") })
+summary(m)  # dev: 15%
+plot(m,pages=1, shade=T)
+as.numeric(performance::r2(m)) 
+
+# residuals
+#-------------
+# bad fit, strong temporal autocorrelation
+par(mfrow=c(2,2),mar=c(6,5,6,3))
+qq.gam(m,cex=1,pch=20)
+hist(residuals(m), xlab="Residuals", main="Histogram of residuals")
+observed.y <- napredict(m$na.action, m$y)
+plot(fitted(m), observed.y, pch=20, xlab = "Fitted Values",
+     ylab = "Response", main = "Response vs. Fitted Values")
+acf(resid(m),lag.max=200, main="Autocorrelation")
 
 
 

@@ -1,5 +1,5 @@
 ##############################################
-########## table summary / ID  ###############
+########## Table summary / ID  ###############
 ##############################################
 
 library(ggplot2)
@@ -14,6 +14,7 @@ library(data.table)
 library(gtExtras)
 library(scales)
 library(gt)
+library(ggcorrplot)
 source("gt_functions_Jojo.R")
 
 
@@ -65,9 +66,13 @@ dep$id[dep$id == "27262"]  = "27262*"
 
 
 
+
+
+
 #########################################
 # dive duration summary
 #########################################
+
 # dur: low resolution
 #------------------------
 dur_lr <- readRDS("./RDATA/1c.duration_Binned_LR_19ids.RDS") %>%
@@ -81,6 +86,9 @@ dur_lr <- readRDS("./RDATA/1c.duration_Binned_LR_19ids.RDS") %>%
 dur_lr = dur_lr[order(dur_lr$date),]
 dur_lr
 unique(dur_lr$id)
+summary(dur_lr$dur)
+hist(dur_lr$dur)
+nrow(dur_lr[dur_lr$dur==0,]) / nrow(dur_lr) * 100 # 16%=dives lasting 30 sec
 
 
 # dur: high resolution
@@ -96,6 +104,7 @@ dur_hr <- readRDS("./RDATA/1b.diveSummary_5HP_calib_5m_zoc0.RDS")  %>%
   dplyr::select(c(id,posix_local,date,hour,dur,month,dataset)) %>%
   ungroup()
 dur_hr = dur_hr[order(dur_hr$date),]
+summary(dur_hr$dur) # 0.3 to 7 min
 names(dur_hr)
 names(dur_lr)
 
@@ -107,6 +116,9 @@ dur$id[dur$id == "22849b"] = "22849b*"
 dur$id[dur$id == "22850b"] = "22850b*"
 dur$id[dur$id == "27262"]  = "27262*"
 summary(dur)
+
+
+
 
 
 
@@ -165,7 +177,7 @@ sum_track
 # duration info
 #----------------
 sum_dur = dur %>%
-  filter(dur < 8) %>%
+  filter(dur < 8) %>% # remove extreme long dives form HR dataset
   group_by(id) %>%
   summarise(Dive_dur = paste0(signif(mean(dur),3),
                               "+",signif(sd(dur),3),
@@ -230,8 +242,6 @@ dur = dur %>%
 # add depth proportions
 # according to depth class
 #-------------------------
-# nrow(dive[dive$month=="Aug" & dive$id=="22849b*" & dive$depth<=20,])
-
 ## in Jul ##
 dive_class = dep %>%
   filter(month == "Jul") %>%
@@ -369,23 +379,23 @@ table1 = table %>%
         .groups = "drop"
       ),
     by = c("id")
-  ) %>%
+  ) #%>%
   
   
-  # add percentage for depth class in July
-  left_join(
-    .,
-    prop_jul,
-    by = c("id")
-  ) %>%
-  # add percentage for depth class in Oct
-  left_join(
-    .,
-    prop_oct,
-    by = c("id")
-  )
+  # # add percentage for depth class in July
+  # left_join(
+  #   .,
+  #   prop_jul,
+  #   by = c("id")
+  # ) %>%
+  # # add percentage for depth class in Oct
+  # left_join(
+  #   .,
+  #   prop_oct,
+  #   by = c("id")
+  # )
 names(table1) 
-View(table1)
+# View(table1)
 table1$percent_dive_jul[1:8] = NA
 
 
@@ -394,49 +404,44 @@ table1$percent_dive_jul[1:8] = NA
 gt(table1) %>%
   # opt_row_striping() %>%
   tab_options(data_row.padding = px(3)) %>%
-  # tab_spanner(
-  #   label = "Length",
-  #   columns = c(Length)
-  # ) %>%
   gt_ggplot_sparkline(sparkline_maxdepth, "sparkline_maxdepth") %>%
   gt_ggplot_sparkline(sparkline_qt_dduration, "sparkline_qt_dduration") %>%
-  
   tab_spanner(label = "Maximum depth (m)",
               columns = c(Maxdepth,
                           sparkline_maxdepth)) %>%
   tab_spanner(label = "Dive duration (min)",
               columns = c(Dduration,
                           sparkline_qt_dduration)) %>%
-  tab_spanner(label = md("Dive proportions in July"),
-              columns = c(percent_dive_jul)) %>%
-  gt_plt_bar_stack_extra(
-    percent_dive_jul,
-    width   = 65,
-    labels  = c("<20", "20-50", "50-100", ">100m"),
-    palette = c("#000000", "#444444", "#888888", "#CCCCCC")
-  ) %>%
-  tab_spanner(label = md("Dive proportions in October"),
-              columns = c(percent_dive_oct)) %>%
-  gt_plt_bar_stack_extra(
-    percent_dive_oct,
-    width   = 65,
-    labels  = c("<20", "20-50", "50-100", ">100m"),
-    palette = c("#000000", "#444444", "#888888", "#CCCCCC")
-  ) %>%
+  # tab_spanner(label = md("Dive proportions in July"),
+  #             columns = c(percent_dive_jul)) %>%
+  # gt_plt_bar_stack_extra(
+  #   percent_dive_jul,
+  #   width   = 70,
+  #   labels  = c("<20", "20-50", "50-100", ">100m"),
+  #   palette = c("#000000", "#444444", "#888888", "#CCCCCC")
+  # ) %>%
+  # tab_spanner(label = md("Dive proportions in October"),
+  #             columns = c(percent_dive_oct)) %>%
+  # gt_plt_bar_stack_extra(
+  #   percent_dive_oct,
+  #   width   = 70,
+  #   labels  = c("<20", "20-50", "50-100", ">100m"),
+  #   palette = c("#000000", "#444444", "#888888", "#CCCCCC")
+  # ) %>%
   
   cols_width(
     id ~ px(70),
     Start ~ px(100),
     End ~ px(100),
-    Sex ~ px(50),
-    Length ~ px(60),
-    ndays ~ px(50),
-    ndive ~ px(90),
-    Maxdepth ~ px(130),
-    sparkline_maxdepth ~ px(70),
-    Dduration ~ px(110),
-    sparkline_qt_dduration ~ px(70),
-    everything() ~ px(270)
+    Sex ~ px(40),
+    Length ~ px(55),
+    ndays ~ px(40),
+    ndive ~ px(80),
+    Maxdepth ~ px(135),
+    sparkline_maxdepth ~ px(75),
+    Dduration ~ px(105),
+    sparkline_qt_dduration ~ px(75)
+    # everything() ~ px(270)
   )  %>%
   
   cols_align(align = "center") %>%
@@ -493,10 +498,10 @@ max(dive$maxdep)  # 450 m
 #-----------
 table <- readRDS("./RDATA/6.Table_summary_17ids.RDS")
 table$ndive = as.numeric(gsub("\\,", "", table$ndive))
-sum(table$ndive)   # 411 448 dives
+sum(table$ndive)   # 265 771 dives
 subset = table %>% filter(id == "93100*" | id == "27262b*" | id == "22849b*"
                           | id == "22850b*"| id == "27262*")
-sum(subset$ndive)  # 401 438 dives
+sum(subset$ndive)  # 255 761 dives for HR tags
 
 
 
@@ -507,29 +512,29 @@ sum(subset$ndive)  # 401 438 dives
 
 
 
-#########################################
-# STATS: pairwise correlations
-#########################################
-dive <- readRDS("./RDATA/1b.diveSummary_5HP_calib_5m_zoc0.RDS")
-names(dive)
-cor_dat = dive %>% 
-  dplyr::select(c(dur, maxdep, meandep, 
-                  bot_dur, asc_dur, des_dur))
-corr <- round(cor(cor_dat, use = "pairwise.complete.obs"), 1)
-corr[is.na(corr)] <- 0
-corr_p <- cor_pmat(cor_dat)
-corr_p[is.na(corr_p)] <- 1
-
-# display
-ggcorrplot(
-  corr,
-  # p.mat = p.mat,
-  hc.order = TRUE,
-  method = "square",
-  type = "lower",
-  lab = TRUE,
-  sig.level = 0.05
-)
+# #########################################
+# # STATS: pairwise correlations
+# #########################################
+# dive <- readRDS("./RDATA/1b.diveSummary_5HP_calib_5m_zoc0.RDS")
+# names(dive)
+# cor_dat = dive %>% 
+#   dplyr::select(c(dur, maxdep, meandep, 
+#                   bot_dur, asc_dur, des_dur))
+# corr <- round(cor(cor_dat, use = "pairwise.complete.obs"), 1)
+# corr[is.na(corr)] <- 0
+# corr_p <- cor_pmat(cor_dat)
+# corr_p[is.na(corr_p)] <- 1
+# 
+# # display
+# ggcorrplot(
+#   corr,
+#   # p.mat = p.mat,
+#   hc.order = TRUE,
+#   method = "square",
+#   type = "lower",
+#   lab = TRUE,
+#   sig.level = 0.05
+# )
 
 
 

@@ -22,10 +22,11 @@ library(suncalc)
 
 
 
+
 ###############################
 # import dataset
 ###############################
-setwd("/Users/philippinechambault/Documents/POST-DOC/2021/MSCA-GF/ANALYSES/HP")
+setwd("/Users/philippinechambault/Documents/POST-DOC/2021/MSCA-GF/ANALYSES/HP-Diel-Seasonal-Pattern")
 loc <- read_excel("./DATA/HP_Satellite_data/HP_satellite-tag_data.xlsx", 
                   col_types = c("text", "text", "text","text",
                                 "text", "text", "numeric", "numeric")) %>%
@@ -136,10 +137,14 @@ rm(loc3, loc2, wrong_dates)
   
 
 
+
+
+
+
 #-----------------------------
 # remove coordinates outliers
 #-----------------------------
-summary(loc$lon) # -149 + 11.4
+summary(loc$lon) # -150 + 11.4
 summary(loc$lat) # 47 to 69
 
 # plot locations per ID
@@ -175,7 +180,7 @@ ggplot(shore, aes(long, lat)) +
   facet_wrap(~deploy_year, ncol=3) +
   theme(legend.position = "none") 
 
-rm(loc2) 
+
 
 
 
@@ -197,8 +202,8 @@ loc = loc %>%
 loc %>%
   group_by(id) %>%
   summarise(year_deploy = first(deploy_year),
-            start       = first(posix),
-            end         = last(posix)) %>%
+            start       = first(posix_local),
+            end         = last(posix_local)) %>%
   mutate(duration = difftime(end, start, units="days"))
 
   
@@ -214,7 +219,7 @@ ggplot(shore, aes(long, lat)) +
 #---------------
 loc = loc %>%
   group_by(id) %>%
-  mutate(date = as.Date(posix),
+  mutate(date = as.Date(posix_local),
          day  = as.numeric(date - first(date)) + 1) 
 
 ndaily_loc = loc %>%
@@ -230,7 +235,7 @@ ndaily_loc %>%
             min  = min(ndaily_loc),
             max  = max(ndaily_loc)) %>%
   ungroup()
-#    id      mean    sd   min   max
+# id      mean    sd   min   max
 # 1 22849   15.8  3.82     9    21
 # 2 22849b  22.9  6.55     8    34
 # 3 22850   32.3  8.92    10    49
@@ -257,7 +262,6 @@ nmonthly_loc = loc %>%
   summarise(nmonthly_loc = n()) %>%
   ungroup()
 nmonthly_loc
-nmonthly_loc %>% filter(id == "27262") # only oct (only 15 locs!)
 
 nmonthly_loc %>%
   group_by(id) %>%
@@ -349,10 +353,10 @@ rm(loc2)
 
 
 
-######################################
-# extract bathy at locations
-######################################
-bathy = raster("./ENV.DATA/GEBCO_Arctic_West.nc")
+###############################################
+# extract bathy from GEBCO (1 km) at locations
+###############################################
+bathy = raster("./ENV.DATA/Bathy/GEBCO_Arctic_West.nc")
 # plot(bathy, col=viridis(64))
 bathy[bathy>0] = NA  # remove cells on land (above sea level)
 system.time({ 
@@ -365,10 +369,93 @@ loc$bathy = abs(loc$bathy)
 
 
 
+
+#######################################################
+# remove locs on land based on Greenland shpaefile
+#######################################################
+setwd("/Users/philippinechambault/Documents/POST-DOC/2021/MSCA-GF/ANALYSES/ClimateChange_PAPER3/ENV.DATA/Bathy_MP/Arc_Greenland/")
+green = readOGR("greenland_wvs_polygon.shp", layer="greenland_wvs_polygon")
+# plot(green,axes=T)
+stere <- "+proj=stere +lat_0=90"
+WGS84 = '+proj=longlat +datum=WGS84'
+
+names(loc)
+xy = SpatialPoints(loc[, c("lon", "lat")], proj4string=CRS(WGS84))
+plot(xy, axes=T, pch=20, cex=0.2)
+map(add=T)
+
+# remove locs on land
+points_on_land = over(xy,green)                # extract land value
+summary(points_on_land)
+loc$land = points_on_land$GREENLAND1
+unique(loc$land)
+points(lat~lon, loc[!is.na(loc$land),],        # identify locs on land
+       pch=19, col="green",cex=0.2)
+nrow(loc[!is.na(loc$land),]) / nrow(loc) * 100 # 0.74%, 101 locs
+loc2 = loc %>% filter(is.na(loc$land))
+plot(lat~lon, loc2, pch=19, cex=0.2)
+map(add=T)
+loc2 -> loc
+rm(loc2)
+
+
+# WGS84 = '+proj=longlat +datum=WGS84'
+# xy = SpatialPointsDataFrame(coords=loc[, c("lon", "lat")], data=loc,
+#                             proj4string=CRS(WGS84))
+# writeOGR(xy, layer="locs_5porpoises_HRtags",
+#          dsn="./RDATA/Locs",
+#          driver="ESRI Shapefile")
+
+
+
+
+
+##########################################################
+# extract bathy from IBCAO (fine-scale bathy in Arctic)
+##########################################################
+setwd("/Users/philippinechambault/Documents/POST-DOC/2021/MSCA-GF/ANALYSES/HP-Diel-Seasonal-Pattern")
+bathy = raster("./ENV.DATA/Bathy/IBCAO_v4_2_200m_ice.nc") # Polar Stereographic projection
+bathy
+plot(bathy, col=viridis(64), zlim=c(-5000,0))
+crs(bathy) <- stere
+bathy = crop(bathy, extent(-2910000,0,-2500000,0))
+plot(bathy, col=viridis(64), zlim=c(-5000,0))
+
+
+# convert locs from lon/lat to meters
+#-------------------------------------
+xy = SpatialPoints(loc[, c("lon", "lat")], proj4string=CRS(WGS84))
+xy_m <- spTransform(xy, CRS(stere)) %>% 
+  as_tibble() %>% 
+  rename(lat_m = lat, lon_m = lon)
+points(xy_m$lon_m, xy_m$lat_m, pch=20, cex=0.2)
+loc = loc %>% bind_cols(xy_m)
+names(loc)
+
+# extract bathy (200 m resolution) from lon_m/lat_m
+#---------------------------------------------------
+loc$bathy_200 = raster::extract(bathy, loc[,c("lon_m","lat_m")])
+summary(loc$bathy_200).  # 101 NA outside bathy range (southwest Greenland)
+plot(bathy, col=viridis(64), zlim=c(-5000,0))
+points(lat_m~lon_m, loc[is.na(loc$bathy_200),], pch=19, cex=0.2, col="red")
+
+
+
+
+
+
+
+
 #####################
 # save dataset
 #####################
+names(loc)
+loc = loc %>% select(-c(land, lon_m, lat_m, dusk, dawn, 
+                        nightEnd, night, day, Type, instr))
 loc = loc %>% ungroup()
+length(unique(loc$id))
+loc$bathy_200 = abs(loc$bathy_200)
+dim(loc) # 13 521
 saveRDS(loc, "./RDATA/1a.locations_filtered_17HP.rds")
 
 
@@ -377,86 +464,6 @@ saveRDS(loc, "./RDATA/1a.locations_filtered_17HP.rds")
 
 
 
-
-
-# ######################################
-# # extract env data at locations
-# ######################################
-# 
-# # MLD #
-# #------
-# r = raster("./ENV.DATA/CMEMS/mld_02102013-08012015_PHY-001-030.nc")
-# plot(r, col=viridis(64))
-# loc$mld = raster::extract(r, loc[,c("lon","lat")])
-# summary(loc$mld) # 66 NA
-# 
-# ggplot(data = loc, aes(x=month, y=mld, fill=mld)) +
-#   geom_boxplot() +
-#   facet_grid(~id)
-# 
-# daily = loc %>%
-#   group_by(id, date) %>%
-#   summarise(mld = mean(mld, na.rm=T))
-# 
-# ggplot(data = daily, aes(x=date, y=mld, fill=mld)) +
-#   geom_bar(stat="identity") +
-#   scale_y_continuous(trans = "reverse") +
-#   scico::scale_fill_scico(palette = "berlin", direction=-1) +
-#   labs(x = "", y = "MLD at location (m)", 
-#        title="Mean daily MLD") +
-#   facet_wrap(~id, scales="free_x") +
-#   theme_tq() 
-# 
-# 
-# 
-# # sea ice concentration #
-# #------------------------
-# library(oce)
-# library(maps)
-# r = raster("./ENV.DATA/CMEMS/sic_02102013-08012015_PHY-001-030.nc")
-# nbands(r)
-# plot(r, col=oceColorsGebco(64))
-# map(add=T)
-# loc$sic = raster::extract(r, loc[,c("lon","lat")])
-# summary(loc$sic) # no sic !
-# 
-# 
-# # sst #
-# #-------
-# r = raster("./ENV.DATA/CMEMS/sst_02102013-08012015_PHY-001-030.nc")
-# plot(r, col=oceColorsFreesurface(64))
-# map(add=T)
-# loc$sst = raster::extract(r, loc[,c("lon","lat")])
-# summary(loc$sst) # 66 NA
-# points(lat~lon, loc[is.na(loc$sst),], pch=19, cex=0.4, col="red")
-# ggplot(data = loc, aes(x=month, y=sst, fill=sst)) +
-#   geom_boxplot(aes(colour=sst)) +
-#   facet_grid(~id)
-# 
-# # U #
-# #-------
-# r = raster("./ENV.DATA/CMEMS/u_02102013-08012015_PHY-001-030.nc")
-# plot(r, col=oceColorsVelocity(64))
-# map(add=T)
-# loc$u = raster::extract(r, loc[,c("lon","lat")])
-# summary(loc$u) # 66 NA
-# points(lat~lon, loc[is.na(loc$u),], pch=19, cex=0.4, col="red")
-# ggplot(data = loc, aes(x=month, y=u)) + # mainly currents flowing westward (offshore)
-#   geom_boxplot() +
-#   facet_grid(~id)
-# 
-# 
-# # V #
-# #-------
-# r = raster("./ENV.DATA/CMEMS/v_02102013-08012015_PHY-001-030.nc")
-# plot(r, col=oceColorsVelocity(64))
-# map(add=T)
-# loc$v = raster::extract(r, loc[,c("lon","lat")])
-# summary(loc$v) # 66 NA
-# points(lat~lon, loc[is.na(loc$v),], pch=19, cex=0.4, col="red")
-# ggplot(data = loc, aes(x=month, y=v)) + 
-#   geom_boxplot() +
-#   facet_grid(~id)
 
 
 

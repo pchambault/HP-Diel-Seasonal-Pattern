@@ -22,21 +22,28 @@ daylength <- readRDS("./RDATA/1c.daylength_depth_LR_19ids.RDS")
 daylength$month = as.numeric(substr(daylength$date, 6, 7))
 unique(daylength$id) # 19 ids
 daylength -> dat
+dat = dat[order(dat$date),]
 
 # select individuals with long tracking dataset 
 # at least 2 months, not only covering summer
 #------------------------------------------------
-dat %>%
+select = dat %>%
   group_by(id) %>%
-  dplyr::summarise(start    = first(date),
-                   end      = last(date),
-                   duration = round(difftime(last(date), first(date), units="days")),
-                   ndives   = n()) 
+  summarise(start    = first(date),
+            end      = last(date),
+            ndives   = n()) %>%
+  mutate(duration = as.numeric(round(difftime(end, 
+                                              start, units="days")))) %>%
+  arrange(desc(duration))
+select %>% filter(duration<60) 
+
+# retain ids with tracking lasting > 60 days
 dat = dat %>% 
-  filter(id != "22849", id != "22853",
-         id != "7617", id != "7618",
-         id != "24638",id != "37227", 
-         id != "37235",id != "22849b", id != "22850b", 
+  filter(id != "22849", id != "22853", id != "37235",
+         id != "37227", 
+         id != "7617", id != "7618",                   # different dive setup
+         # id != "24638",
+         id != "22849b", id != "22850b",               # remove HR tags
          id != "27262", id != "27262b", id != "93100") # remove HR tags
 dat$month = as.numeric(substr(dat$date, 6, 7))
 unique(dat$id) # 8 remaining individuals

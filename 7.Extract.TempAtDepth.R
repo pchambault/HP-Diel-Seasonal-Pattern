@@ -60,7 +60,7 @@ df = df %>%
          year  = lubridate::year(time)) 
 df
 
-# select cells mlatching HP coordinates
+# select cells matching HP coordinates
 summary(loc$lon)
 summary(loc$lat)
 df_25m = df %>%
@@ -91,7 +91,7 @@ df = df %>%
   mutate(month = substr(time, 6, 7),
          year  = lubridate::year(time)) 
 
-# select cells mlatching HP coordinates
+# select cells matching HP coordinates
 df_55m = df %>%
   filter(longitude>(-61) & longitude<(-44)
          & latitude>56 & latitude<70)
@@ -277,7 +277,7 @@ ggplot(data=monthly, aes(x=mean_temp, y=-depth)) +
 
 
 #############################################
-## Temp form 0 to 380 m 
+## Temp from 0 to 380 m 
 #############################################
 df_nc <- tidync("./ENV.DATA/PHY-001-030/temp0-380m_02102013-08012015_PHY-001-030.nc") 
 
@@ -363,17 +363,22 @@ mean$month = factor(mean$month, levels = c("Jul","Aug","Sep","Oct",
 # plot monthly temperate vs depth per month
 # add mean HP depth per month
 #---------------------------------------------
+monthly = monthly %>% filter(month != "Jan") 
 ggplot(data=monthly, aes(x=mean_temp, y=-depth)) +
   geom_point() +
   geom_path() +
-  geom_hline(data = mean, aes(yintercept=-mean_dep),
-             lwd=0.2, linetype = "dashed", colour="blue") +
+  # geom_hline(data = mean, aes(yintercept=-mean_dep),
+  #            lwd=0.2, linetype = "dashed", colour="blue") +
   facet_wrap(~month) + 
   labs(x="Temperature (deg C)",y="Depth (m)",
        title = "Monthly mean in 2014- 2015") +
   theme_tq()
 
 rm(df_nc)
+
+
+
+
 
 
 
@@ -461,7 +466,7 @@ monthly %>%
 
 
 #################################################
-# extract temp at 25m at HP's loc
+# extract temp at 25m at HP's locations
 #################################################
 # hr <- readRDS("/Users/philippinechambault/Documents/POST-DOC/2021/MSCA-GF/ANALYSES/HP/RDATA/1b.dive_5HP_calib_5m_zoc0.RDS")
 # str(hr)

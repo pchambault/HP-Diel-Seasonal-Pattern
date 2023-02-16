@@ -1,5 +1,5 @@
 ###########################################
-####      SI FIGURES FOR HP PAPER #########
+####     SI FIGURES Cor matrix.   #########
 ###########################################
 
 
@@ -12,7 +12,7 @@ library(ggplot2)
 #########################
 # load LR dataset
 #########################
-lr <- readRDS("./RDATA/1c.daylight_LR.RDS")
+lr <- readRDS("./RDATA/1c.daylength_depth_LR_19ids.RDS")
 lr$month = as.numeric(substr(lr$date, 6, 7))
 unique(lr$id) # 19 ids
 
@@ -23,7 +23,8 @@ lr %>%
   group_by(id) %>%
   dplyr::summarise(start    = first(date),
                    end      = last(date),
-                   duration = round(difftime(last(date), first(date), units="days")),
+                   duration = round(difftime(last(date), 
+                                             first(date), units="days")),
                    ndives   = n()) 
 lr = lr %>% 
   filter(id != "22849", id != "22853",
@@ -37,16 +38,21 @@ summary(lr)
 
 
 
+
+
+
 #########################
 # load HR dataset
 #########################
-hr <- readRDS("./RDATA/4.daylight_HR.RDS")
-hr$month = as.numeric(substr(hr$date, 6, 7))
-length(unique(hr$id))  # 5 ids
+hr <- readRDS("./RDATA/1b.daylength_depth_HR_5ids.RDS") %>%
+  rename(date = date2) %>%
+  dplyr::select(-c(sunrise, sunset)) %>%
+  mutate(month = as.numeric(substr(date, 6, 7)))
+length(unique(hr$id))   # 5 ids
 
 dive = rbind(lr, hr)
 length(unique(dive$id)) # 13 ids
-dive = dive[!is.na(dive$daylight),] # 5042 obs
+dive = dive[!is.na(dive$daylength),] # 1471 obs
 
 
 
@@ -60,7 +66,7 @@ dive = dive[!is.na(dive$daylight),] # 5042 obs
 ###########################################
 # Create data 
 data <- dive %>% dplyr::select(-c(id, date)) %>%
-  rename(daylength = daylight, 'mean depth' = mean_dep, 
+  rename('mean depth' = mean_dep, 
          'median depth' = median_dep, 'max depth' = max_dep)
 
 # Function to return points and geom_smooth
@@ -93,7 +99,7 @@ ggpairs(data, title="Pairwise correlations between variables",
         panel.grid.minor = element_blank(),
         plot.margin = unit(c(0.1,0.1,0.2,0.3),"cm")) # t, r, b, l 
 
-ggsave(filename=paste0("./FIGURES/PAPER/SI.Fig1.pdf"),
+ggsave(filename=paste0("./FIGURES/PAPER/SI/SI.Fig1.pdf"),
        width=5,height=5,units="in",dpi=400,family="ArialMT")
 
 
