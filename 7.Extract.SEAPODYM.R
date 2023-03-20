@@ -31,8 +31,8 @@ daily = hr %>%
   dplyr::summarise(lon = first(lon),
             lat = first(lat),
             meandep = mean(depth),
-            maxdep = max(depth),
-            month  = first(month)) %>%
+            maxdep  = max(depth),
+            month   = first(month)) %>%
   mutate(date_ch = as.character(date)) %>%
   ungroup()
 })
