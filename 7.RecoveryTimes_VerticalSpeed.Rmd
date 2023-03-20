@@ -1,0 +1,915 @@
+---
+title: "Recovery times and vertical speed"
+author: "Philippine Chambault"
+date: "2023-01-11"
+output:
+  bookdown::html_document2:
+    number_sections: yes
+    code_folding: show
+    df_print: default
+    fig_caption: yes
+    toc: yes
+    toc_float:
+      collapsed: yes
+      smooth_scroll: no
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(
+  echo      = TRUE,
+  fig.align = "center",
+  message = FALSE,
+  warning = FALSE,
+  out.width = "100%"
+)
+```
+
+__Background__:
+Investigation of vertical velocity and recovery times in harbour porpoise (time between dives) and potential relationship with dive depth (longer recovery times for deeper dives). Dive threshold = 5 m. Analysis on high resolution dataset (n=5).
+
+```{r, global_options, include=FALSE}
+library(ggplot2)
+library(tidyquant)
+library(gridExtra)
+library(tidyverse)
+library(viridis)
+library(DT)
+library(data.table)
+library(ggcorrplot)
+library(ggdensity)
+```
+
+
+```{r, echo=F}
+sum <- readRDS("./RDATA/1b.diveSummary_5HP_calib_5m_zoc0.RDS")
+sum = sum[order(sum$start),]
+
+# difference between end of dive t and start of dive t+1
+sum2 = sum %>%
+  group_by(id) %>%
+  mutate(start_next = lead(start)) %>% # select the next dive start
+  ungroup()
+
+# difference between end (dive t) and start (dive t+1)
+sum2 = sum2 %>%
+  group_by(id) %>%
+  mutate(recovery = as.numeric(start_next - start)) %>%
+  ungroup()
+
+# add depth class
+sum2$class = cut(sum2$maxdep, 
+                 breaks = c(0, 10, 20, 50, 100, 400))
+```
+
+
+
+
+# Recovery time vs depth {.tabset}
+```{r, echo=F}
+k = 5
+```
+
+## All
+```{r, echo=FALSE, fig.pos="placeHere", fig.height=4, fig.cap="Recovery time (time between end of dive t and dive t+1) according to depth class for the 5 porpoises (high resolution tags)."}
+ggplot(sum2, aes(x = class, y = recovery/60, fill = class)) +
+  geom_boxplot(outlier.shape = NA) +
+  scale_fill_brewer(palette = "PiYG") +
+  labs(y = "Recovery time (min)", x = "Depth class (m)",
+       title = paste0("Dive threshold at ",k,"m")) +
+  ylim(0,10) +
+  theme_tq() +
+  theme(legend.position = "none") 
+```
+Recovery time increases with dive depth.
+
+## Per individual
+```{r, echo=FALSE, fig.pos="placeHere", fig.height=3, fig.cap="Individual recovery times according to depth class."}
+ggplot(sum2, aes(x = class, y = recovery/60, fill = class)) +
+  geom_boxplot(outlier.shape = NA) +
+  scale_fill_brewer(palette = "PiYG") +
+  labs(y = "Recovery time (min)", x = "Depth class (m)",
+       title = paste0("Dive threshold at ",k,"m")) +
+  ylim(0,10) +
+  facet_wrap(.~id, ncol=5) +
+  theme_tq() +
+  theme(legend.position = "none",
+        axis.text.x = element_text(angle = 90)) 
+```
+Similar pattern across individuals.
+
+## Per light cycle
+```{r, echo=FALSE, fig.pos="placeHere", fig.height=3, fig.cap="Recovery time (time between end of dive t and dive t+1) according to depth class for the 5 porpoises (high resolution tags)."}
+ggplot(sum2, aes(x = class, y = recovery/60, fill = class)) +
+  geom_boxplot(outlier.shape = NA) +
+  scale_fill_brewer(palette = "PiYG") +
+  labs(y = "Recovery time (min)", x = "Depth class (m)",
+       title = paste0("Dive threshold at ",k,"m")) +
+  ylim(0,10) +
+  facet_wrap(.~period, ncol = 4) +
+  theme_tq() +  
+  theme(legend.position = "none",
+        axis.text.x = element_text(angle = 90))
+```
+Similar pattern across light phases.
+
+## Per month
+```{r, echo=F}
+sum2 = sum2 %>%
+  mutate(month = format(start, "%b")) %>%
+  filter(month != "Jan") 
+sum2$month = factor(sum2$month, 
+                    levels = c("Jul","Aug","Sep","Oct","Nov","Dec"))
+```
+
+```{r, echo=FALSE, fig.pos="placeHere", fig.height=5, fig.cap="Recovery time according to depth class and month."}
+ggplot(sum2, aes(x = class, y = recovery/60, fill = class)) +
+  geom_boxplot(outlier.shape = NA) +
+  scale_fill_brewer(palette = "PiYG") +
+  labs(y = "Recovery time (min)", x = "Depth class (m)",
+       title = paste0("Dive threshold at ",k,"m")) +
+  ylim(0,10) +
+  facet_wrap(.~month, ncol = 3) +
+  theme_tq() +  
+  theme(legend.position = "none",
+        axis.text.x = element_text(angle = 90))
+```
+Similar pattern across months.
+
+
+## 0-10 m, across months
+```{r, echo=F}
+dat = sum2 %>% filter(class=="(0,10]")
+kruskal.test(dat$recovery, dat$month)
+```
+
+```{r, echo=FALSE, fig.pos="placeHere", fig.height=3, fig.cap="Recovery time according to month for dives between 0-10 m."}
+ggplot(sum2[sum2$class=="(0,10]",], 
+       aes(x = month, y = recovery/60, fill = month)) +
+  geom_boxplot(outlier.shape = NA) +
+  scale_fill_brewer(palette = "PiYG") +
+  labs(y = "Recovery time (min)", x = "Month",
+       title = "Dives between 0-10 m") +
+  ylim(0,5) +
+  theme_tq() +  
+  theme(legend.position = "none")
+```
+
+## 10-20 m, across months
+```{r, echo=F}
+dat = sum2 %>% 
+  filter(class=="(10,20]") %>%
+  group_by(month) %>%
+  summarise(mean_reco = mean(recovery))
+kruskal.test(dat$mean_reco, dat$month)
+```
+
+```{r, echo=FALSE, fig.pos="placeHere", fig.height=3, fig.cap="Recovery time according to month for dives between 10-20 m."}
+ggplot(sum2[sum2$class=="(10,20]",], 
+       aes(x = month, y = recovery/60, fill = month)) +
+  geom_boxplot(outlier.shape = NA) +
+  scale_fill_brewer(palette = "PiYG") +
+  labs(y = "Recovery time (min)", x = "Month",
+       title = "Dives between 10-20 m") +
+  ylim(0,10) +
+  theme_tq() +  
+  theme(legend.position = "none")
+```
+
+## 20-50 m, across months
+```{r, echo=F}
+dat = sum2 %>% 
+  filter(class=="(20,50]") %>%
+  group_by(month) %>%
+  summarise(mean_reco = mean(recovery))
+kruskal.test(dat$mean_reco, dat$month)
+```
+
+```{r, echo=FALSE, fig.pos="placeHere", fig.height=3, fig.cap="Recovery time according to month for dives between 20-50 m."}
+ggplot(sum2[sum2$class=="(20,50]",], 
+       aes(x = month, y = recovery/60, fill = month)) +
+  geom_boxplot(outlier.shape = NA) +
+  scale_fill_brewer(palette = "PiYG") +
+  labs(y = "Recovery time (min)", x = "Month",
+       title = "Dives between 20-50 m") +
+  ylim(0,10) +
+  theme_tq() +  
+  theme(legend.position = "none")
+```
+
+## 50-100 m, across months
+```{r, echo=F}
+dat = sum2 %>% 
+  filter(class=="(50,100]") %>%
+  group_by(month) %>%
+  summarise(mean_reco = mean(recovery))
+kruskal.test(dat$mean_reco, dat$month)
+```
+
+```{r, echo=FALSE, fig.pos="placeHere", fig.height=3, fig.cap="Recovery time according to month for dives between 50-100 m."}
+ggplot(sum2[sum2$class=="(50,100]",], 
+       aes(x = month, y = recovery/60, fill = month)) +
+  geom_boxplot(outlier.shape = NA) +
+  scale_fill_brewer(palette = "PiYG") +
+  labs(y = "Recovery time (min)", x = "Month",
+       title = "Dives between 50-100 m") +
+  ylim(0,10) +
+  theme_tq() +  
+  theme(legend.position = "none")
+```
+
+## 100-400 m, across months
+```{r, echo=F}
+dat = sum2 %>% 
+  filter(maxdep>100) %>%
+  group_by(month) %>%
+  summarise(mean_reco = mean(recovery))
+kruskal.test(dat$mean_reco, dat$month)
+```
+
+```{r, echo=FALSE, fig.pos="placeHere", fig.height=3, fig.cap="Recovery time according to month for dives between 100-400 m."}
+ggplot(sum2[sum2$maxdep>100,], 
+       aes(x = month, y = recovery/60, fill = month)) +
+  geom_boxplot(outlier.shape = NA) +
+  scale_fill_brewer(palette = "PiYG") +
+  labs(y = "Recovery time (min)", x = "Month",
+       title = "Dives between 100-400 m") +
+  ylim(0,10) +
+  theme_tq() +  
+  theme(legend.position = "none")
+```
+
+
+
+## Correlation
+```{r, echo=F}
+cor.test(sum2$maxdep, sum2$recovery) 
+```
+
+```{r, echo=FALSE, fig.pos="placeHere", fig.height=4, fig.cap="Correlation between recovery time and max depth."}
+ggplot(sum2, aes(x = maxdep, y = recovery/60)) +
+  geom_point(size = 0.3) +
+  geom_smooth(method = "gam") +
+  labs(y = "Recovery time (min)", x = "Max depth (m)",
+       title = paste0("Dive threshold at ",k,"m")) +
+  theme_tq() +
+  ylim(0,50)
+```
+Both variables are highly correlated(cor test: 0.56, p<0.001).
+
+
+
+
+
+
+
+
+
+# Recovery time vs duration {.tabset}
+```{r, echo=F}
+k = 5
+```
+
+## All
+```{r, echo=FALSE, fig.pos="placeHere", fig.height=4, fig.cap="Recovery time (time between end of dive t and dive t+1) according to dive durtaion for the 5 porpoises (high resolution tags)."}
+ggplot(sum2, aes(x = dur/60, y = recovery/60)) +
+  geom_point(aes(colour=class, alpha=0.5), size=0.2) +
+  geom_smooth(colour="black", size=0.3, fill="grey") +
+  scale_colour_brewer(palette = "PiYG") +
+  labs(y = "Recovery time (min)", x = "Dive duration (min)",
+       title = paste0("Dive threshold at ",k,"m")) +
+  ylim(0,10) +
+  theme_tq() +
+  theme(legend.position = "bottom") +
+  guides(colour = guide_legend(override.aes = list(size=3)))
+```
+Recovery time increases with dive duration, but breaking point around 1 min.
+
+## Per individual
+```{r, echo=FALSE, fig.pos="placeHere", fig.height=3, fig.cap="Individual recovery times according to dive durtaion."}
+ggplot(sum2, aes(x = dur/60, y = recovery/60)) +
+  geom_point(aes(colour=class, alpha=0.5), size=0.2) +
+  geom_smooth(colour="black", size=0.3) +
+  scale_colour_brewer(palette = "PiYG") +
+  labs(y = "Recovery time (min)", x = "Dive duration (min)",
+       title = paste0("Dive threshold at ",k,"m"),
+       fill="Depth class (m)") +
+  ylim(0,10) +
+  facet_wrap(.~id, ncol=5) +
+  theme_tq() +
+  theme(legend.position = "bottom") +
+  guides(colour = guide_legend(override.aes = list(size=3)))
+```
+Similar pattern across individuals.
+
+
+## Geom_hdr
+```{r, echo=FALSE, fig.pos="placeHere", fig.height=3, fig.cap="Individual recovery times according to dive duration."}
+ggplot(sum2, aes(x = dur/60, y = recovery/60)) +
+  geom_hdr(aes(fill = after_stat(probs)),
+           alpha = 1, xlim=c(0,6), ylim=c(0,10)) +
+  scale_fill_brewer(palette = 3, direction = 1) +
+  geom_smooth(colour="black", size=0.3) +
+  labs(y = "Recovery time (min)", x = "Dive duration (min)",
+       title = paste0("Dive threshold at ",k,"m"),
+       fill="Dive proportions") +
+  ylim(0,10) +
+  facet_wrap(.~id, ncol=5) +
+  theme_tq() 
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+# Hourly dives {.tabset}
+```{r, echo=F}
+hourly = sum2 %>%
+  mutate(date = as.Date(start),
+         hour = as.numeric(format(start, "%H"))) %>%
+  group_by(id) %>% 
+  mutate(day  = as.numeric(date - first(date)) + 1) %>%
+  ungroup() %>%
+  group_by(id, hour, day) %>%
+  summarise(ntot = n_distinct(dive),
+            dives0_20m   = n_distinct(dive[maxdep<=20]),
+            dives20_50m  = n_distinct(dive[maxdep>20 & maxdep<=50]),
+            dives50_100m = n_distinct(dive[maxdep>50 & maxdep<=100]),
+            dives_deep100m = n_distinct(dive[maxdep>100])) %>%
+  ungroup()
+mean(hourly$ntot)
+sd(hourly$ntot)
+
+mean_hourly = hourly %>%
+  group_by(id, hour) %>%
+  summarise(mean_dives0_20m     = mean(dives0_20m),
+            mean_dives20_50m    = mean(dives20_50m),
+            mean_dives50_100m   = mean(dives50_100m),
+            mean_dives_deep100m = mean(dives_deep100m))
+
+pivot = mean_hourly %>%
+  pivot_longer(c(mean_dives0_20m, mean_dives20_50m, 
+                 mean_dives50_100m, mean_dives_deep100m), 
+               names_to = "depth_class", values_to = "n") %>%
+  select(id,hour,depth_class,n) 
+
+pivot = pivot %>%
+  mutate(class = case_when(depth_class == "mean_dives0_20m" ~ "0-20 m",
+                           depth_class == "mean_dives20_50m" ~ "20-50 m",
+                           depth_class == "mean_dives50_100m" ~ "50-100 m",
+                           depth_class == "mean_dives_deep100m" ~ ">100 m"))
+pivot$class = factor(pivot$class,
+                     levels=c("0-20 m","20-50 m",
+                              "50-100 m", ">100 m"))
+```
+On average 17 (SD: 6.6) dives performed per hour, including 3.3 (SD: 1.2) dives between 0-20 m and 3.8 (SD: 1.7) dives deeper than 100 m. Note dives shorter tan 20 sec and shallower than 5 m were discarded.
+
+
+## Mean N dives (facet_grid)
+```{r, echo=FALSE, fig.pos="placeHere", fig.height=6, fig.cap="Mean daily number of hourly dives according to max depth (dive threshold: 5 m)."}
+ggplot(pivot, aes(y=n, x=hour)) +
+  geom_histogram(aes(fill=class), stat="identity",
+                 position="stack", fill="grey") +
+  facet_grid(class~id) +
+  labs(x = "Hours", y = "Mean n hourly dives", fill = "") +
+  theme_tq() +
+  theme(legend.position = "none")
+```
+Shallow dives above 20 m dominate (>10 per hour), and no clear pattern is evidenced as these dives are performed all day long.
+Dives between 20-50 m are performed mostly during daytime, especially for individuals 22850b, 27262 and 93100.
+Dives deeper than 50 m are less frequent (<5 dives per hour), and a clear diel pattern was observed as these deep dives get more frequent at night, especially for individuals 22850b, 27262 and 93100.
+
+
+## Mean N dives
+```{r, echo=FALSE, fig.pos="placeHere", fig.height=3, fig.cap="Mean daily number of hourly dives according to max depth (dive threshold: 5 m)."}
+ggplot(pivot, aes(y=n, x=hour)) +
+  geom_histogram(aes(fill=class), stat="identity",
+                 position="stack") +
+  facet_wrap(~id, ncol=5) +
+  scale_fill_brewer(palette = 1, direction = 1) +
+  labs(x = "Hours", y = "Mean n hourly dives",fill = "") +
+  theme_tq() +
+  theme(panel.grid.major = element_blank())
+```
+
+
+## Frequency
+```{r, echo=F}
+hourly = sum2 %>%
+  mutate(hour = as.numeric(format(start, "%H"))) %>%
+  group_by(id, hour) %>%
+  summarise(ntot         = n_distinct(dive),
+            dives0_20m   = n_distinct(dive[maxdep<=20]),
+            dives20_50m  = n_distinct(dive[maxdep>20 & maxdep<=50]),
+            dives50_100m = n_distinct(dive[maxdep>50 & maxdep<=100]),
+            dives_deep100m = n_distinct(dive[maxdep>100])) %>%
+  ungroup()
+
+prop = hourly %>%
+  mutate(dives0_20m     = (dives0_20m / ntot) * 100,
+         dives20_50m    = (dives20_50m / ntot) * 100,
+         dives50_100m   = (dives50_100m / ntot) * 100,
+         dives_deep100m = (dives_deep100m / ntot) * 100)
+
+pivot = prop %>%
+  pivot_longer(c(dives0_20m, dives20_50m, 
+                 dives50_100m, dives_deep100m), 
+               names_to = "depth_class", values_to = "prop") %>%
+  select(id,hour,ntot,depth_class,prop) 
+
+pivot = pivot %>%
+  mutate(class = case_when(depth_class == "dives0_20m" ~ "0-20 m",
+                           depth_class == "dives20_50m" ~ "20-50 m",
+                           depth_class == "dives50_100m" ~ "50-100 m",
+                           depth_class == "dives_deep100m" ~ ">100 m"))
+
+pivot$class = factor(pivot$class,
+                     levels=c("0-20 m","20-50 m",
+                              "50-100 m", ">100 m"))
+```
+
+```{r, echo=FALSE, fig.pos="placeHere", fig.height=3, fig.cap="Porportion of hourly dives according to max depth."}
+ggplot(pivot, aes(y=prop, x=hour)) +
+  geom_histogram(aes(fill=class), stat="identity",
+                 position="fill") +
+  facet_wrap(~id, ncol=5) +
+  scale_fill_brewer(palette = 1, direction = 1) +
+  labs(x = "Hours of the day", y = "Dive frequency (%)",fill = "") +
+  theme_tq() +
+  theme(panel.grid.major = element_blank())
+```
+
+
+
+## Mean N dives across months
+```{r, echo=F}
+hourly = sum2 %>%
+  mutate(date  = as.Date(start),
+         month = format(start, "%b"),
+         hour  = as.numeric(format(start, "%H"))) %>%
+  group_by(id) %>% 
+  mutate(day  = as.numeric(date - first(date)) + 1) %>%
+  ungroup() %>%
+  group_by(id, hour, day, month) %>%
+  summarise(ntot = n_distinct(dive),
+            dives0_20m   = n_distinct(dive[maxdep<=20]),
+            dives20_50m  = n_distinct(dive[maxdep>20 & maxdep<=50]),
+            dives50_100m = n_distinct(dive[maxdep>50 & maxdep<=100]),
+            dives_deep100m = n_distinct(dive[maxdep>100])) %>%
+  ungroup()
+
+mean_hourly = hourly %>%
+  group_by(hour, month) %>%
+  summarise(mean_dives0_20m     = mean(dives0_20m),
+            mean_dives20_50m    = mean(dives20_50m),
+            mean_dives50_100m   = mean(dives50_100m),
+            mean_dives_deep100m = mean(dives_deep100m)) %>%
+  ungroup()
+
+pivot = mean_hourly %>%
+  pivot_longer(c(mean_dives0_20m, mean_dives20_50m, 
+                 mean_dives50_100m, mean_dives_deep100m), 
+               names_to = "depth_class", values_to = "n") %>%
+  select(hour,month,depth_class,n) 
+
+pivot = pivot %>%
+  filter(month != "Jan") %>%
+  mutate(class = case_when(depth_class == "mean_dives0_20m" ~ "0-20 m",
+                           depth_class == "mean_dives20_50m" ~ "20-50 m",
+                           depth_class == "mean_dives50_100m" ~ "50-100 m",
+                           depth_class == "mean_dives_deep100m" ~ ">100 m"))
+pivot$class = factor(pivot$class,
+                     levels=c("0-20 m","20-50 m",
+                              "50-100 m", ">100 m"))
+pivot$month = factor(pivot$month,
+                     levels=c("Jul","Aug","Sep","Oct","Nov","Dec"))
+```
+
+```{r, echo=FALSE, fig.pos="placeHere", fig.height=3, fig.cap="Mean daily number of hourly dives according to max depth and months (dive threshold: 5 m)."}
+ggplot(pivot, aes(y=n, x=hour)) +
+  geom_histogram(aes(fill=class), stat="identity",
+                 position="stack") +
+  facet_wrap(~month, ncol=6) +
+  scale_fill_brewer(palette = 1, direction = 1) +
+  labs(x = "Hours of the day", y = "Mean n hourly dives",
+       fill = "Depth class") +
+  theme_tq() +
+  theme(panel.grid.major = element_blank(),
+        strip.text = element_text(size=9, colour = "white"),
+        strip.background = element_rect(fill = "steelblue4",
+                                        colour="white"),
+        plot.margin = unit(c(0.4,0.2,0.2,0.1), "cm"), # t r b l
+        panel.border = element_rect(linewidth = 0.2),
+        panel.spacing.x = unit(0.0, "lines"),
+        panel.spacing.y = unit(0.0, "lines"),
+        panel.grid.minor = element_blank())
+
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+# Vertical speed {.tabset}
+## Ascent rate
+```{r, echo=F}
+av_speed = sum2 %>%
+  group_by(class) %>%
+  summarise(mean_speed = mean(asc_rate, na.rm=T),
+            sd_speed = sd(asc_rate, na.rm=T)) %>%
+  mutate(lower = mean_speed - sd_speed,
+         upper = mean_speed + sd_speed) %>%
+  ungroup()
+```
+
+```{r, echo=FALSE, fig.pos="placeHere", fig.height=3, fig.cap="Average ascent rate (m/s) according to depth class."}
+ggplot(av_speed, aes(x = class, y = mean_speed, colour = class)) +
+  geom_pointrange(aes(ymin = lower, ymax = upper)) +
+  scale_fill_brewer(palette = "PiYG") +
+  labs(y = "Mean ascent rate (m/s)", x = "Depth class (m)") +
+  theme_tq() +
+  geom_hline(yintercept = 0, lty = 2, linewidth = 0.2) +
+  theme(legend.position = "none") 
+```
+Ascent rate is higher at greater depths. 
+
+
+## Ascent rate monthly
+```{r, echo=F}
+av_speed = sum2 %>%
+  group_by(class, month) %>%
+  summarise(mean_speed = mean(asc_rate, na.rm=T),
+            sd_speed = sd(asc_rate, na.rm=T)) %>%
+  mutate(lower = mean_speed - sd_speed,
+         upper = mean_speed + sd_speed) %>%
+  ungroup()
+
+av_speed$month = factor(av_speed$month, 
+                        levels = c("Jul","Aug","Sep","Oct","Nov","Dec"))
+```
+
+```{r, echo=FALSE, fig.pos="placeHere", fig.height=5, fig.cap="Average ascent rate (m/s) according to depth class and month."}
+ggplot(av_speed, aes(x = class, y = mean_speed, colour = class)) +
+  geom_pointrange(aes(ymin = lower, ymax = upper)) +
+  scale_fill_brewer(palette = "PiYG") +
+  labs(y = "Mean ascent rate (m/s)", x = "Depth class (m)") +
+  facet_wrap(.~month) +
+  theme_tq() +
+  geom_hline(yintercept = 0, lty = 2, linewidth = 0.2) +
+  theme(legend.position = "none",
+        axis.text.x = element_text(angle = 90)) 
+```
+
+
+
+## Descent rate
+```{r, echo=F}
+av_speed = sum2 %>%
+  group_by(class) %>%
+  summarise(mean_speed = mean(des_rate, na.rm=T),
+            sd_speed = sd(des_rate, na.rm=T)) %>%
+  mutate(lower = mean_speed - sd_speed,
+         upper = mean_speed + sd_speed) %>%
+  ungroup()
+```
+
+```{r, echo=FALSE, fig.pos="placeHere", fig.height=3, fig.cap="Average descent rate (m/s) according to depth class."}
+ggplot(av_speed, aes(x = class, y = mean_speed, colour = class)) +
+  geom_pointrange(aes(ymin = lower, ymax = upper)) +
+  scale_fill_brewer(palette = "PiYG") +
+  labs(y = "Mean descent rate (m/s)", x = "Depth class (m)") +
+  geom_hline(yintercept = 0, lty = 2, linewidth = 0.2) +
+  theme_tq() +
+  theme(legend.position = "none") 
+```
+Similar pattern for descent rate higher for deeper dives.
+
+
+
+## Descent rate monthly
+```{r, echo=F}
+av_speed = sum2 %>%
+  mutate(month = format(start, "%b")) %>%
+    filter(month != "Jan") %>%
+  group_by(class, month) %>%
+  summarise(mean_speed = mean(des_rate, na.rm=T),
+            sd_speed = sd(des_rate, na.rm=T)) %>%
+  mutate(lower = mean_speed - sd_speed,
+         upper = mean_speed + sd_speed) %>%
+  ungroup()
+
+av_speed$month = factor(av_speed$month, 
+                        levels = c("Jul","Aug","Sep","Oct","Nov","Dec"))
+```
+
+```{r, echo=FALSE, fig.pos="placeHere", fig.height=5, fig.cap="Average descent rate (m/s) according to depth class and month."}
+ggplot(av_speed, aes(x = class, y = mean_speed, colour = class)) +
+  geom_pointrange(aes(ymin = lower, ymax = upper), size = 0.2) +
+  scale_fill_brewer(palette = "PiYG") +
+  labs(y = "Mean descent rate (m/s)", x = "Depth class (m)") +
+  facet_wrap(.~month) +
+  geom_hline(yintercept = 0, lty = 2, linewidth = 0.2) +
+  theme_tq() +
+  theme(legend.position = "none",
+        axis.text.x = element_text(angle = 90))  
+```
+
+
+
+## Ascent and descent rates
+```{r, echo=F}
+pivot = sum2 %>%
+  select(asc_rate, des_rate, id, maxdep, class) %>%
+  pivot_longer(c(asc_rate, des_rate), 
+               names_to = "rate", values_to = "value") 
+```
+
+```{r, echo=FALSE, fig.pos="placeHere", fig.height=3.5, fig.cap="Vertical speed (m/s) according to descent (orange) and ascent (green) phase and depth class."}
+ggplot(pivot, aes(y=value, x=class, fill=rate)) +
+  geom_boxplot(outlier.shape = NA) +
+  facet_wrap(.~id, ncol = 5) +
+  scale_fill_brewer(palette = "Dark2") +
+  labs(x = "Depth class (m)", y = "Vertical speed (m/s)",
+       fill = "") +
+  # ylim(0,2.25) +
+  theme_tq() +
+  theme(axis.text.x = element_text(angle = 90))
+```
+
+
+
+# Bottom time
+```{r, echo=F}
+sum2 %>%
+  group_by(id, class) %>%
+  summarise(mean_bottom_time = mean(bot_dur/60))
+```
+
+```{r, echo=FALSE, fig.pos="placeHere", fig.height=3, fig.cap="Individual bottom duration (in min) according to depth class."}
+ggplot(sum2, aes(y=bot_dur/60, x=class, fill=class)) +
+  geom_boxplot(outlier.shape = NA) +
+  facet_wrap(.~id, ncol = 5) +
+  scale_fill_brewer(palette = 1, direction = 1) +
+  labs(x = "Depth class (m)", y = "Bottom duration (min)",
+       fill = "") +
+  # ylim(0,2.25) +
+  theme_tq() +
+  theme(axis.text.x = element_text(angle = 90),
+        legend.position = "none")
+```
+Bottom time increases with dive depth until 100 m, but then decreases for dives deeper than 100 m.
+
+
+
+
+
+
+
+
+
+# Vertical speed per dive type {.tabset}
+```{r, echo=F}
+clust <- readRDS("./RDATA/4.Clustering/4.DiveCluster_5HP_4clusters.RDS")
+clust = clust[order(clust$start, clust$id),]
+
+# difference between end of dive t and start of dive t+1
+reco = clust %>%
+  group_by(id) %>%
+  mutate(start_next = lead(start)) %>% # select the next dive start
+  ungroup()
+
+# difference between end (dive t) and start (dive t+1)
+reco = reco %>%
+  group_by(id) %>%
+  mutate(recovery = as.numeric(start_next - start)) %>%
+  ungroup()
+
+# add depth class
+clust$class = cut(clust$maxdep, 
+                  breaks = c(0, 10, 20, 50, 100, 400))
+```
+
+## Ascent rate
+```{r, echo=F}
+av_speed = clust %>%
+  group_by(cluster) %>%
+  summarise(mean_speed = mean(asc_rate, na.rm=T),
+            sd_speed = sd(asc_rate, na.rm=T)) %>%
+  mutate(lower = mean_speed - sd_speed,
+         upper = mean_speed + sd_speed) %>%
+  ungroup()
+```
+
+```{r, echo=FALSE, fig.pos="placeHere", fig.height=3, fig.cap="Average ascent rate (m/s) according to dive type."}
+ggplot(av_speed, aes(x = cluster, y = mean_speed, colour = cluster)) +
+  geom_pointrange(aes(ymin = lower, ymax = upper)) +
+  scale_fill_brewer(palette = "PiYG") +
+  labs(y = "Mean ascent rate (m/s)", x = "Dive type") +
+  theme_tq() +
+  geom_hline(yintercept = 0, lty = 2, linewidth = 0.2) +
+  theme(legend.position = "none") 
+```
+
+
+## Ascent rate monthly
+```{r, echo=F}
+av_speed = clust %>%
+  filter(month != "Jan") %>%
+  group_by(cluster, month) %>%
+  summarise(mean_speed = mean(asc_rate, na.rm=T),
+            sd_speed = sd(asc_rate, na.rm=T)) %>%
+  mutate(lower = mean_speed - sd_speed,
+         upper = mean_speed + sd_speed) %>%
+  ungroup()
+
+av_speed$month = factor(av_speed$month, 
+                        levels = c("Jul","Aug","Sep","Oct","Nov","Dec"))
+```
+
+```{r, echo=FALSE, fig.pos="placeHere", fig.height=5, fig.cap="Average ascent rate (m/s) according to dive type and month."}
+ggplot(av_speed, aes(x = cluster, y = mean_speed, colour = cluster)) +
+  geom_pointrange(aes(ymin = lower, ymax = upper)) +
+  scale_fill_brewer(palette = "PiYG") +
+  labs(y = "Mean ascent rate (m/s)", x = "Cluster") +
+  facet_wrap(.~month) +
+  theme_tq() +
+  geom_hline(yintercept = 0, lty = 2, linewidth = 0.2) +
+  theme(legend.position = "none",
+        axis.text.x = element_text(angle = 90)) 
+```
+
+
+
+## Descent rate
+```{r, echo=F}
+av_speed = clust %>%
+  group_by(cluster) %>%
+  summarise(mean_speed = mean(des_rate, na.rm=T),
+            sd_speed = sd(des_rate, na.rm=T)) %>%
+  mutate(lower = mean_speed - sd_speed,
+         upper = mean_speed + sd_speed) %>%
+  ungroup()
+```
+
+```{r, echo=FALSE, fig.pos="placeHere", fig.height=3, fig.cap="Average descent rate (m/s) according to dive type."}
+ggplot(av_speed, aes(x = cluster, y = mean_speed, colour = cluster)) +
+  geom_pointrange(aes(ymin = lower, ymax = upper)) +
+  scale_fill_brewer(palette = "PiYG") +
+  labs(y = "Mean descent rate (m/s)", x = "Cluster") +
+  geom_hline(yintercept = 0, lty = 2, linewidth = 0.2) +
+  theme_tq() +
+  theme(legend.position = "none") 
+```
+
+
+
+## Descent rate monthly
+```{r, echo=F}
+av_speed = clust %>%
+  filter(month != "Jan") %>%
+  group_by(cluster, month) %>%
+  summarise(mean_speed = mean(des_rate, na.rm=T),
+            sd_speed = sd(des_rate, na.rm=T)) %>%
+  mutate(lower = mean_speed - sd_speed,
+         upper = mean_speed + sd_speed) %>%
+  ungroup()
+
+av_speed$month = factor(av_speed$month, 
+                        levels = c("Jul","Aug","Sep","Oct","Nov","Dec"))
+```
+
+```{r, echo=FALSE, fig.pos="placeHere", fig.height=5, fig.cap="Average descent rate (m/s) according to dive type and month."}
+ggplot(av_speed, aes(x = cluster, y = mean_speed, colour = cluster)) +
+  geom_pointrange(aes(ymin = lower, ymax = upper), size = 0.2) +
+  scale_fill_brewer(palette = "PiYG") +
+  labs(y = "Mean descent rate (m/s)", x = "Cluster") +
+  facet_wrap(.~month) +
+  geom_hline(yintercept = 0, lty = 2, linewidth = 0.2) +
+  theme_tq() +
+  theme(legend.position = "none",
+        axis.text.x = element_text(angle = 90))  
+```
+
+
+
+## Ascent and descent rates
+```{r, echo=F}
+pivot = clust %>%
+  select(asc_rate, des_rate, id, maxdep, cluster) %>%
+  pivot_longer(c(asc_rate, des_rate), 
+               names_to = "rate", values_to = "value") 
+```
+
+```{r, echo=FALSE, fig.pos="placeHere", fig.height=3.5, fig.cap="Vertical speed (m/s) according to descent (orange) and ascent (green) phase and dive type."}
+ggplot(pivot, aes(y=value, x=cluster, fill=rate)) +
+  geom_boxplot(outlier.shape = NA) +
+  facet_wrap(.~id, ncol = 5) +
+  scale_fill_brewer(palette = "Dark2") +
+  labs(x = "Dive type", y = "Vertical speed (m/s)",
+       fill = "") +
+  ylim(0,1.5) +
+  theme_tq()
+```
+
+
+
+
+
+
+
+
+
+# Descent rate for deep dives (type 3) {.tabset}
+```{r, echo=F}
+clust = clust %>%
+  mutate(weight = case_when(id == "22849b" ~ 26,
+                            id == "22850b" ~ 37,
+                            id == "27262b" ~ 38,
+                            id == "27262"  ~ 58,
+                            id == "93100"  ~ 42))
+deep = clust %>% filter(cluster == "3")
+```
+ADL estimated at 5.4 min for a 28 kg porpoise (Reed et al 2000).
+
+ADL estimated at 4.5 min for a 37 and 48 kg porpoise (Otani et al 2000).
+
+Range of ADL estimated: 2.2-5 min (using body mass & metabolic rates from Rojano-Donate et al 2020).
+
+ADL estimated at 2.2 min for a 26 kg porpoise (McDonald et al 2021).
+ADL estimated at 3.0 min for a 30 kg porpoise (McDonald et al 2021).
+ADL estimated at 4.2 min for a 44 kg porpoise (McDonald et al 2021).
+ADL estimated at 6.3 min for a 67 kg porpoise (McDonald et al 2021).
+
+
+
+
+## vs maxdep
+```{r, echo=FALSE, fig.pos="placeHere", fig.height=4.5, fig.cap="Descent rate according to max depth for deep dives (type 3)."}
+ggplot(deep, aes(y=des_rate, x=-maxdep)) +
+  coord_flip() +
+  geom_point(size = 0.2, aes(alpha=0.8)) +
+  geom_smooth(method = "gam", aes(colour=id),size=0.5,se=F) +
+  facet_wrap(.~id, scales = "free_x") +
+  labs(y = "Descent rate (m/s)", x = "Max depth (m)") +
+  theme_tq() +
+  theme(legend.position = "none")
+```
+
+
+## vs duration
+```{r, echo=FALSE, fig.pos="placeHere", fig.height=4.5, fig.cap="Descent rate according to dive duration for deep dives (type 3)."}
+ggplot(deep, aes(x=des_rate, y=dur/60)) +
+  geom_point(size = 0.2, aes(alpha=0.8)) +
+  geom_smooth(method = "gam", aes(colour=id),size=0.5,se=F) +
+  facet_wrap(.~id, scales = "free_x") +
+  labs(x = "Descent rate (m/s)", y = "Duration (min)") +
+  theme_tq() +
+  theme(legend.position = "none")
+```
+
+
+
+
+
+
+
+
+# Ascent rate for deep dives (type 3) {.tabset}
+## vs maxdep
+```{r, echo=FALSE, fig.pos="placeHere", fig.height=4.5, fig.cap="Ascent rate according to max depth for deep dives (type 3)."}
+ggplot(deep, aes(y=asc_rate, x=-maxdep)) +
+  coord_flip() +
+  geom_point(size = 0.2, aes(alpha=0.8)) +
+  geom_smooth(method = "gam", aes(colour=id),size=0.5,se=F) +
+  facet_wrap(.~id, scales = "free_x") +
+  labs(y = "Ascent rate (m/s)", x = "Max depth (m)") +
+  theme_tq() +
+  theme(legend.position = "none")
+```
+
+
+## vs duration
+```{r, echo=FALSE, fig.pos="placeHere", fig.height=4.5, fig.cap="Ascent rate according to dive duration for deep dives (type 3)."}
+ggplot(deep, aes(x=asc_rate, y=dur/60)) +
+  geom_point(size = 0.2, aes(alpha=0.8)) +
+  geom_smooth(method = "gam", aes(colour=id),size=0.5,se=F) +
+  facet_wrap(.~id, scales = "free_x") +
+  labs(x = "Ascent rate (m/s)", y = "Duration (min)") +
+  theme_tq() +
+  theme(legend.position = "none")
+```

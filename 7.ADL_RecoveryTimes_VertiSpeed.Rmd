@@ -1,0 +1,286 @@
+---
+title: "ADL - Recovery time - Vertical speed"
+author: "Philippine Chambault"
+date: "2023-01-12"
+output:
+  bookdown::html_document2:
+    number_sections: yes
+    code_folding: show
+    df_print: default
+    fig_caption: yes
+    toc: yes
+    toc_float:
+      collapsed: yes
+      smooth_scroll: no
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(
+  echo      = TRUE,
+  fig.align = "center",
+  message = FALSE,
+  warning = FALSE,
+  out.width = "100%"
+)
+```
+
+__Background__:
+Investigation of vertical speed and recovery times in relation to ADL (from literature) in harbour porpoise, and potential relationship with dive depth and duration. Dive threshold = 5 m. Analysis on high resolution dataset (n=5).
+
+ADL estimated from literature:
+
+- Noren et al 2014: 3.3-6.5 for a 37 kg juvenile; 3.5-6.9 for a 50 kg adult
+
+- Reed et al. 2000: 5.4 min for a 28 kg porpoise
+
+- Otani et al. 2001: 4.5 min for 37 and 48 kg porpoises
+
+- McDonald et al 2021: 5 min for a 67 kg adult, 4.2 min for a 44 kg porpoise, 3 min for a 30 kg porpoise, 3.6 min for a 28 kg porpoise and 2.2 min for a 26 kg porpoise.
+
+
+Oxygen stores estimated:
+
+- Otani et al. 2001: in porpoises: 37.2 ml O2 per kg
+
+- Williams : in dolphins: 33 ml O2 per kg
+
+
+
+
+
+```{r, global_options, include=FALSE}
+library(ggplot2)
+library(tidyquant)
+library(gridExtra)
+library(tidyverse)
+library(viridis)
+library(DT)
+library(data.table)
+library(ggcorrplot)
+library(ggdensity)
+```
+
+
+```{r, echo=F}
+clust <- readRDS("./RDATA/4.Clustering/4.DiveCluster_5HP_4clusters.RDS")
+clust = clust[order(clust$start, clust$id),]
+
+# add columns body weight and ADL (rom McDonald et al 2021) 
+clust = clust %>%
+  mutate(weight = case_when(id == "22849b" ~ 36,
+                            id == "22850b" ~ 37,
+                            id == "27262b" ~ 38,
+                            id == "27262"  ~ 58,
+                            id == "93100"  ~ 42),
+         ADLmin = case_when(id == "22849b" ~ 3.3,
+                            id == "22850b" ~ 3.3,
+                            id == "27262b" ~ 3.5,
+                            id == "27262"  ~ 3.5,
+                            id == "93100"  ~ 3.5),
+         dur = dur / 60)
+clust$id_weight = paste0(clust$id,", ",clust$weight,"kg")
+clust$id_weight = factor(clust$id_weight,
+                         levels = c("22849b, 36kg",
+                                    "22850b, 37kg",
+                                    "27262b, 38kg",
+                                    "93100, 42kg",
+                                    "27262, 58kg"))
+
+# add depth class
+clust$class = cut(clust$maxdep, 
+                  breaks = c(seq(0,330, by=30),370))
+```
+
+
+
+
+# Maxdep vs duration {.tabset}
+```{r, echo=F}
+cor.test(clust$dur, clust$maxdep)
+clust = clust %>%
+  mutate(ADL_sup = case_when(id == "22849b" & dur > 3.3 ~ "yes",
+                             id == "22850b" & dur > 3.3 ~ "yes",
+                             id == "27262b" & dur > 3.5 ~ "yes",
+                             id == "27262"  & dur > 3.5 ~ "yes",
+                             id == "93100"  & dur > 3.5 ~ "yes",
+                             TRUE ~ "no"))
+mean(clust$dur[clust$maxdep>100])
+```
+The mean duration of dives deeper than 100 m is 3.05 min.
+
+## Per ID
+```{r, echo=FALSE, fig.pos="placeHere", fig.height=4.5, fig.cap="Relationship between max depth and dive duration per individual. Grey dots refer to dives beyond the estimated ADL per age class from Noren et al 2014."}
+ggplot(clust, aes(y=dur, x=-maxdep)) +
+  coord_flip() +
+  geom_point(size = 0.2) + 
+  geom_point(data=clust[clust$ADL_sup=="yes",],
+             size = 0.2, colour = "grey", aes(y=dur, x=-maxdep)) + 
+  geom_smooth(method = "gam", colour="steelblue4", size=0.8, se=F) +
+  facet_wrap(~id_weight, ncol = 5) +
+  labs(y = "Dive duration (min)", x = "Max depth (m)") +
+  theme_tq() +
+  theme(legend.position = "none")
+```
+A similar trend is observed for each individual: a clear relationship between max depth and dive duration, with a more pronounced slope up to 50 m, while the slope appears less steep below 50 m. It is worth noting that a significant number of dives appear to be beyond the estimated ADL from Noren et al 2014 (grey dots). Findings in disagreement with McDonald et al 2021 that showed no porpoise diving beyond cADL. But more in line with Reed et al 2000 (ADL of 5.4 min for a 28 kg porpoise) and Otani et al. 2001 (ADL: 4.5 min for 37 and 48 kg porpoises).
+
+
+## All
+```{r, echo=FALSE, fig.pos="placeHere", fig.height=4, fig.cap="Relationship between max depth and dive duration for the 5 porpoises. Grey dots refer to dives beyond the estimated ADL per age class from Noren et al 2014."}
+ggplot(clust, aes(y=dur, x=-maxdep)) +
+  coord_flip() +
+  geom_point(size = 0.2) + 
+  geom_point(data=clust[clust$ADL_sup=="yes",],
+             size = 0.2, colour = "grey", aes(y=dur, x=-maxdep)) + 
+  geom_smooth(method = "gam", colour="deepskyblue4", 
+              fill = "deepskyblue", size=0.8, se=T) +
+  labs(y = "Dive duration (min)", x = "Max depth (m)", 
+       colour="Dives > ADLc") +
+  theme(legend.position = "bottom") +
+  theme_tq() 
+```
+
+
+## Dive proportions
+```{r, echo=FALSE, fig.pos="placeHere", fig.height=4.5, fig.cap="Density plots showing the porportions of dives according to depth and duration. Red dotted lines refer to the calculated ADL per age class derived from Noren et al 2014."}
+ggplot(clust, aes(x=dur, y=-maxdep)) +
+  geom_hdr(aes(fill = after_stat(probs)),
+           alpha = 1, xlim=c(0,7), ylim=c(-370,0)) +
+  geom_vline(aes(xintercept=ADLmin), linetype = 2, 
+             colour="red", size = 0.5) +
+  scale_y_continuous(breaks = c(-20,-50,-100,-200,-300),
+                     labels = c(20, 50, 100, 200, 300),
+                     minor_breaks = c(-20,-50,-100,-200,-300)) +
+  facet_wrap(~id_weight, ncol = 5) +
+  labs(x = "Dive duration (min)", y = "Max depth (m)") +
+  theme_tq() +
+  theme(legend.position = "bottom")
+```
+Despite in lower proportions, a signifcant number of dives were performed outside the estimated ADL from Noren et al 2014.
+
+
+
+
+
+
+
+
+# Recovery time {.tabset}
+```{r, echo=F}
+clust[duplicated(clust$start),] %>% View()
+clust = clust[!duplicated(clust$start),] 
+
+clust = clust %>%
+  group_by(id) %>%
+  mutate(start_next = lead(start), # select the next dive start
+         reco = as.numeric(start_next - start)) %>% 
+  ungroup()
+```
+
+## Dive proportions
+```{r, echo=FALSE, fig.pos="placeHere", fig.height=2.5, fig.cap="Boxplots showing the recovery times according to the cADL from Noren et al 2014 (e.g. no: dives below cADL vs. yes: dives above cADL)."}
+ggplot(clust, aes(y=reco/60, x=ADL_sup, colour = ADL_sup)) +
+  geom_boxplot(outlier.shape = NA) + 
+  facet_wrap(~id_weight, ncol = 5) +
+  labs(y = "Recovery time (min)", x = "Dives above ADL") +
+  ylim(0,12) +
+  theme_tq() +
+  theme(legend.position = "none")
+```
+Dives above cADL show longer recovery times, and bigger porpoises (#93100 and #27262) exhibit longer recovery times for dives above cADL.
+
+## vs. dive duration
+```{r, echo=FALSE, fig.pos="placeHere", fig.height=3, fig.cap="Relationship between recovery time and dive duration."}
+ggplot(clust, aes(x=dur, y=reco/60)) +
+  geom_point(size = 0.2) + 
+  # geom_point(data=clust[clust$ADL_sup=="yes",],
+  #            size = 0.2, colour = "grey", aes(y=dur, x=-maxdep)) + 
+  geom_smooth(method = "gam", colour="deepskyblue4", 
+              fill = "deepskyblue", size=0.8, se=T) +
+  labs(x = "Dive duration (min)", y = "Recovery time (min)") +
+  ylim(0,100) +
+  facet_wrap(~id_weight, ncol = 5) +
+  theme(legend.position = "bottom") +
+  theme_tq() 
+```
+Some dives with very short recovery times. Should be removed?
+
+
+## vs. dive duration updated
+```{r, echo=FALSE, fig.pos="placeHere", fig.height=3, fig.cap="Relationship between recovery time and dive duration (for recovery times > 10 sec)."}
+ggplot(clust[clust$dur>1,], aes(x=dur, y=reco/60)) +
+  geom_point(size = 0.2) + 
+  geom_smooth(method = "gam", colour="deepskyblue4", 
+              fill = "deepskyblue", size=0.8, se=T) +
+  labs(x = "Dive duration (min)", y = "Recovery time (min)") +
+  ylim(0,100) +
+  facet_wrap(~id_weight, ncol = 5) +
+  theme(legend.position = "bottom") +
+  theme_tq() 
+```
+
+
+
+
+
+
+# Relationship with body mass {.tabset}
+## Daily mean dive duration
+```{r, echo=F}
+daily = clust %>%
+  mutate(date = substr(start, 1, 10)) %>%
+  group_by(id, date) %>%
+  summarise(maxdep  = max(maxdep), 
+            meandur = mean(dur),
+            maxdur  = max(dur),
+            weight  = unique(weight)) %>%
+  ungroup()
+sum2 = daily %>% 
+  group_by(id) %>%
+  summarise(meandep = mean(maxdep),
+            maxdep  = max(maxdep),
+            meandur = mean(meandur),
+            maxdur  = max(maxdur),
+            weight  = unique(weight)) %>%
+  ungroup()
+cor.test(sum2$meandur, sum2$weight) 
+```
+
+```{r, echo=FALSE, fig.pos="placeHere", fig.height=3, fig.cap="Relationship between body mass and daily mean dive duration."}
+ggplot(sum2, aes(x=meandur, y=weight)) +
+  geom_point(size = 1, alpha=0.7) +
+  geom_smooth(method = "lm", colour="black",size=0.5,se=T) +
+  labs(x = "Mean daily dive duration (min)", 
+       y = "Body mass (kg)") +
+  theme_tq()
+```
+
+## Mean dive duration
+```{r, echo=F}
+sum2 = clust %>% 
+  group_by(id) %>%
+  summarise(meandur   = mean(dur),
+            maxdur    = max(dur),
+            mediandur = median(dur),
+            weight    = unique(weight)) %>%
+  ungroup()
+cor.test(sum2$meandur, sum2$weight) 
+```
+
+```{r, echo=FALSE, fig.pos="placeHere", fig.height=3, fig.cap="Relationship between body mass and mean dive duration."}
+ggplot(sum2, aes(x=meandur, y=weight)) +
+  geom_point(size = 1, alpha=0.7) +
+  geom_smooth(method = "lm", colour="black",size=0.5,se=T) +
+  labs(x = "Mean dive duration (min)", y = "Body mass (kg)") +
+  theme_tq()
+```
+Very small sample size but increasing relationship.
+
+
+
+
+# In summary
+Based on ADL calculated from Noren et al 2014 and McDonald et al 2021, a significant proportion of dives were longer than ADL for the 5 individuals. Without the metabolic rate and oxygen consumption, not easy to estimate when only body mass available. ADLs from Reed et al 2000 and Otani et al 2001 seem more realistic but quite old references that might not be up to date.
+
+
+
+
