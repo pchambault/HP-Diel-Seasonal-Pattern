@@ -3,8 +3,7 @@
 Code associated with the harbour porpoises paper, focusing on the diel and seasonal patterns of the diving behaviour of Greenlandic harbour porpoises. 
 The dataset includes 17 individuals instrumented in West Greenland between 2013 and 2014 in Maniitsoq. Among the 17 tags (SPLASH and MK10 tags), five tags were retrieved, providing high-resolution data at 1-sec interval over up to 6 months.
 
-The data associated with these scripts can be found on the Dryad repository
-It includes: 
+The data associated with these scripts can be found on the Dryad repository (10.5061/dryad.zpc866tdh) and it includes: 
 - 5 csv files corresponding to the high resolution data collected from the 5 harbour porpoises.
 - 1 excel file containing all locations: "HP_satellite-tag_data".
 - 1 csv file containing the dive data from the 19 low resolution tags: "HP2017-Histos".
