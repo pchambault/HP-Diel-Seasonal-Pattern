@@ -1,9 +1,9 @@
 #######################################################################
 ###########         functions to generate tables with   ###############
 ############             embbeded figures with gt       ###############
+############              code by: Joffrey Joumaa       ###############
 #######################################################################
 
-#---------------------------------------------------------------------------------
 # https://themockup.blog/posts/2020-10-31-embedding-custom-features-in-gt-tables/
 gt_plot <- function(table_data, plot_col, data_col, plot_fun, ...) {
   # save the data extract ahead of time
@@ -98,21 +98,22 @@ gt_plt_bar_stack_extra <- function (gt_object,
             group = .data$y
           )) + geom_col(position = position,
                         color = "white",
-                        size = 1) + geom_text(
-                          aes(label = fmt_fn(x)),
-                          hjust = 0.5,
-                          size = 3,
-                          family = "mono",
-                          fontface = "bold",
-                          position = if (position ==
-                                         "fill") {
-                            position_fill(vjust = 0.5)
-                          }
-                          else if (position == "stack") {
-                            position_stack(vjust = 0.5)
-                          },
-                          color = "white"
-                        ) + scale_x_continuous(expand = if (position ==
+                        size = 1) + 
+          # geom_text(aes(label = fmt_fn(x)),
+          #                 hjust = 0.5,
+          #                 size = 3,
+          #                 family = "mono",
+          #                 fontface = "bold",
+          #                 position = if (position ==
+          #                                "fill") {
+          #                   position_fill(vjust = 0.5)
+          #                 }
+          #                 else if (position == "stack") {
+          #                   position_stack(vjust = 0.5)
+          #                 },
+          #                 color = "white"
+          #               ) + 
+          scale_x_continuous(expand = if (position ==
                                                             "stack") {
                           expansion(mult = c(0, 0.1))
                         }
