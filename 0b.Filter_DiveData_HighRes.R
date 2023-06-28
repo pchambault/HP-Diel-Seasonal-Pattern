@@ -45,7 +45,6 @@ system.time({ # 77 sec
     colnames(id)[2] = "depth"
     
     id = id %>%
-      # mutate(depth = as.numeric(depth),
       mutate(date  = as.numeric(dateTime),
              date  = excel_numeric_to_date(date))
     
@@ -73,15 +72,6 @@ hp = hp %>%
 gc()
 summary(hp$posix)
 
-# convert times into POSIX
-#--------------------------
-# system.time({      # 260 sec: 4 min!
-#   hp$posix1 = as.POSIXct(strptime(hp$posix,
-#                                  format="%Y-%m-%d %H:%M:%S"), 
-#                         tz="UTC") })  
-# gc()
-# summary(hp$posix1) # 604 NA!
-# hp %>% filter(is.na(posix1)) %>% View()
 
 # summarise data per ID
 #------------------------
@@ -105,7 +95,6 @@ hp %>%
 #-----------------------------
 ggplot(data = hp, aes(x=-depth)) +
   geom_histogram() +
-  # xlim(-400,0) +
   coord_flip() +
   labs(y = "dive frequency", x = "Depth (m)") +
   facet_wrap(~id, scales="free")
@@ -218,16 +207,14 @@ str(hp)
 offset    = 0
 threshold = 5  # threshold depth below which an underwater phase should be considered a dive
 
-system.time({ # 13643.016 sec for 5 ids (4h30): threshold=5 m, offset=0
-  # 14700 sec for 4 ids, threshold=5 m, offset=0
+system.time({  # 13,643 sec for 5 ids (4h30) with threshold=5 m, offset=0
   for (i in 1:length(unique(hp$id))) {
     id = hp %>%
       filter(id == unique(id)[i]) %>%
       rename(time = posix)
 
     ptt = unique(id$id)
-    id  = id %>%
-      select(depth, time)
+    id  = id %>% select(depth, time)
     id  = id[order(id$time),]
     id  = id[!duplicated(id$time),]
 
@@ -251,7 +238,7 @@ system.time({ # 13643.016 sec for 5 ids (4h30): threshold=5 m, offset=0
 
 
 #########################################################################
-# add dive number and phases to the dive dataset
+# Add dive number and phases to the dive dataset
 #########################################################################
 offset    = 0 # zero offset correction in meters
 threshold = 5 # threshold depth below which an underwater phase should be considered a dive
@@ -369,7 +356,6 @@ first_dep = dive %>%
   rename(date = posix) %>%
   ungroup() 
 first_dep
-# first_dep %>% filter(is.na(date)) %>% View()
 
 # import locations for the 5 HP
 #----------------------------------
@@ -391,6 +377,7 @@ diveDT = setDT(first_dep)
 setkey(diveDT,id,date)
 locDT  = setDT(loc)
 setkey(locDT,id,date)
+
 
 # rolling join on date
 #----------------------
@@ -443,7 +430,7 @@ rm(dive2, first_dep)
 
 
 # check coordinates
-#-------------------------------
+#--------------------
 north_map = map_data("world") %>% group_by(group)
 shore     = north_map[north_map$region=="Greenland"
                       | north_map$region=="Norway"
@@ -563,7 +550,7 @@ hist(ndive_summary$dur/60)
 
 
 ###################################################
-# correct time zone according to lon/lat and date
+# Correct time zone according to lon/lat and date
 # in summer: UTC-2 West Greenland
 # in winter: UTC-3 West Greenland
 ###################################################
@@ -594,6 +581,9 @@ system.time({  # 9 sec
     unnest(start_local, end_local)
 })
 summary(ndive_summary2$lon)
+
+# check new times
+#-----------------
 head(paste0(ndive_summary2$start, "->", ndive_summary2$start_local))
 head(paste0(ndive_summary2$end,   "->", ndive_summary2$end_local))
 table(ndive_summary2$timezone)
@@ -604,7 +594,7 @@ table(ndive_summary2$timezone)
 
 
 #############################################
-# extract sunrise/sunset at locs
+# Extract sunrise/sunset at locs
 #############################################
 str(ndive_summary2)
 ndive_summary2 = ndive_summary2 %>%
@@ -642,7 +632,7 @@ time1 = time1 %>%
 
 
 ## tz=Etc/GMT+3 ##
-#--------------------------
+#------------------
 time2 = ndive_summary2 %>%
   filter(timezone == "Etc/GMT+3") 
 tz = unique(time2$timezone)
@@ -722,12 +712,13 @@ gc()
 
 
 ############################################
-# calculate daylength per day and per ID
+# Calculate daylength per day and per ID
+# base don times of sunrise and sunset
 ############################################
 names(ndive_summary)
 daylength = ndive_summary %>%
   mutate(day_depart = as.numeric(date - first(date)) + 1) %>%
-  filter(day_depart != 1) %>%  # remove first day because never complete so wrong daylength
+  filter(day_depart != 1) %>%  # remove first day because never complete
   group_by(id, date) %>%
   summarise(max_dep  = max(maxdep),
             mean_dep = mean(maxdep),

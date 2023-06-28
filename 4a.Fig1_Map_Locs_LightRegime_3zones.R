@@ -28,7 +28,6 @@ loc <- readRDS("./RDATA/0a.locations_filtered_17HP_tzCorrected.rds") %>%
   filter(day_depart != 1)
 loc$month = factor(loc$month, 
                    levels = c("Jul","Aug","Sep","Oct","Nov","Dec"))
-names(loc)
 length(unique(loc$id))  # 17
 
 
@@ -57,7 +56,7 @@ dep_lr <- readRDS("./RDATA/0c.depth_Binned_LR_19ids_tzCorrected.RDS") %>%
   mutate(date  = as.Date(posix_local),
          hour  = substr(posix_local, 12, 13),
          month = format(date, "%b")) %>%
-  dplyr::select(c(id,posix_local,date,hour,depth,month)) %>%
+  dplyr::select(id,posix_local,date,hour,depth,month) %>%
   filter(id != "7618",id != "7617") %>%
   mutate(dataset = "Low resolution")
 dep_lr = dep_lr[order(dep_lr$date),]
@@ -73,9 +72,9 @@ dep_hr <- readRDS("./RDATA/0b.diveSummary_5HP_calib_5m_zoc0_tzCorrected.RDS")  %
          hour  = substr(start_local, 12, 13),
          month = format(date, "%b"),
          dataset = "Low resolution") %>%
-  dplyr::rename(posix_local = start_local,
+  rename(posix_local = start_local,
                 depth = maxdep) %>%
-  dplyr::select(c(id,posix_local,date,hour,depth,month,dataset)) %>%
+  dplyr::select(id,posix_local,date,hour,depth,month,dataset) %>%
   ungroup()
 dep_hr = dep_hr[order(dep_hr$date),]
 names(dep_hr)
@@ -88,11 +87,11 @@ table(dep$id)
 # n dives in July and Dec
 #--------------------------
 ndive_jul = dep %>% filter(month == "Jul") %>% 
-  summarise(ndive = n()) # 14568
+  summarise(ndive = n()) # 14,494
 ndive_jul = as.numeric(ndive_jul)
 
 ndive_dec = dep %>% filter(month == "Dec") %>% 
-  summarise(ndive = n()) # 21217
+  summarise(ndive = n()) # 21,171
 ndive_dec = as.numeric(ndive_dec)
 
 
@@ -115,15 +114,16 @@ bathy = raster("./ENV.DATA/Bathy/GEBCO_Arctic2.nc")
 bathy[bathy>0] = NA
 bathy = crop(bathy, extent(-100,20,50,90))
 res(bathy)
-bathy = aggregate(bathy, fact=4)
+bathy = aggregate(bathy, fact=4) # reduce resolution for visual purpose
 res(bathy)  # 0.03 decimal deg
 
 
 # convert to tibble
 #------------------------------
-bathy_df = rasterToPoints(bathy) %>% as_tibble()
-bathy_df = bathy_df %>% rename(lon = x, lat = y)
-bathy_df$layer = abs(bathy_df$layer)
+bathy_df = rasterToPoints(bathy) %>% 
+  as_tibble() %>% 
+  rename(lon = x, lat = y) %>%
+  mutate(layer = abs(layer))
 
 # plot panel a
 #--------------
@@ -167,7 +167,7 @@ a = ggplot(shore, aes(long, lat)) +
         legend.box.spacing = unit(0.15,'cm'),
         legend.margin = margin(t=-0.0, unit='cm'),
         legend.key = element_blank(),
-        panel.border = element_rect(colour="black",fill=NA,size=0.2),
+        panel.border = element_rect(colour="black",fill=NA,linewidth=0.2),
         title = element_text(colour="black",size=10,face="bold"),
         panel.background = element_blank(),
         panel.grid.major = element_line(colour="gray52", size=0.1),
@@ -188,11 +188,9 @@ a = ggplot(shore, aes(long, lat)) +
 
 # convert to tibble
 #------------------------------
-# bathy_df = rasterToPoints(bathy) %>% as_tibble()
 bathy_df = bathy_df %>% 
   mutate(date = as.POSIXct("2014-07-15 23:54:00", # time at sunset
                            tz="America/Nuuk")) 
-  # rename(lon = x, lat = y)
 
 
 # extract sun position
@@ -212,7 +210,7 @@ table(sunpos$period) / nrow(sunpos) * 100
 sunpos = sunpos %>% bind_cols(bathy_df)
 
 # mean sunrise and sunset on 15 July from all locations
-#----------------------------------------------------
+#-------------------------------------------------------
 sun = loc %>% 
   filter(date == as.Date("2014-07-16")) %>%  # 15/07 not available in dataset so took 16/07
   summarise(min_sunrise  = min(sunrise),
@@ -227,8 +225,8 @@ sun = loc %>%
 data.frame(sun)
 
 
-# plot
-#---------
+# plot panel b
+#---------------
 b = ggplot(shore, aes(long, lat)) +
   coord_map("azequidistant", xlim=c(-60,-30), ylim=c(55,80)) +
   geom_polygon(aes(group=group), fill="white",
@@ -267,7 +265,7 @@ b = ggplot(shore, aes(long, lat)) +
   geom_hline(yintercept = 66, colour = "blue", 
              linewidth = 0.3, linetype=2) +
   labs(y = "", x = "Longitude (°W)", title = "b) July", 
-       fill = "Solar \nelevation") + #Light regime
+       fill = "Solar \nelevation") + 
   theme(axis.text.x = element_text(size=7, vjust = 0.5, hjust=0.5,
                                    margin = margin(r = 0)),
         axis.text.y = element_blank(),
@@ -281,7 +279,7 @@ b = ggplot(shore, aes(long, lat)) +
         legend.box.spacing = unit(0.15,'cm'),
         legend.margin=margin(t=-0.0, unit='cm'),
         legend.key = element_blank(),
-        panel.border = element_rect(colour="black",fill=NA,size=0.2),
+        panel.border = element_rect(colour="black",fill=NA,linewidth=0.2),
         title = element_text(colour="black",size=10,face="bold"),
         panel.background = element_blank(),
         panel.grid.major = element_line(colour="gray52", size=0.1),
@@ -300,8 +298,8 @@ b = ggplot(shore, aes(long, lat)) +
 # plot panel c: locs in Dec with day/night areas
 ##################################################
 # https://en.tutiempo.net/day-night/?utc=20141201T1412
-bathy_df = rasterToPoints(bathy) %>% as_tibble()
-bathy_df = bathy_df %>% 
+bathy_df = rasterToPoints(bathy) %>% 
+  as_tibble() %>%
   mutate(date = as.POSIXct("2014-12-15 14:09:00", # at sunset
                            tz="America/Nuuk")) %>%
   rename(lon = x, lat = y)
@@ -335,8 +333,8 @@ sun %>% summarise(min_sunrise  = min(sunrise),
                   mean_sunset  = mean(sunset),
                   max_sunset   = min(sunset))
 
-# plot
-#--------
+# plot panel c
+#--------------
 c = ggplot(shore, aes(long, lat)) +
   coord_map("azequidistant", xlim=c(-60,-30), ylim=c(55,80)) +
   geom_polygon(aes(group=group), fill="white",
@@ -361,9 +359,11 @@ c = ggplot(shore, aes(long, lat)) +
   annotate("text", y = 75, x=-40,
            label = "Mean daylength: 5h", size=2) +
   annotate("text", y = 74, x=-40,
-           label = paste0("Mean sunrise: ",substr(mean(sun$sunrise),12,16)), size=2) +
+           label = paste0("Mean sunrise: ",
+                          substr(mean(sun$sunrise),12,16)), size=2) +
   annotate("text", y = 73, x=-40,
-           label = paste0("Mean sunset: ",substr(mean(sun$sunset),12,16)), size=2) +
+           label = paste0("Mean sunset: ",
+                          substr(mean(sun$sunset),12,16)), size=2) +
   annotate("text", y = 72, x=-40,
            label = paste0(length(unique(loc$id[loc$month=="Dec"])),
                           " individuals"), size=2) +
@@ -388,7 +388,7 @@ c = ggplot(shore, aes(long, lat)) +
         legend.box.spacing = unit(0.15,'cm'),
         legend.margin=margin(t=-0.0, unit='cm'),
         legend.key = element_blank(),
-        panel.border = element_rect(colour="black",fill=NA,size=0.2),
+        panel.border = element_rect(colour="black",fill=NA,linewidth=0.2),
         title = element_text(colour="black",size=10,face="bold"),
         panel.background = element_blank(),
         panel.grid.major = element_line(colour="gray52", size=0.1),

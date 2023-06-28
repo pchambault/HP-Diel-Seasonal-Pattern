@@ -1,6 +1,5 @@
 ##############################################
-########## Table summary / ID        #########
-########## after timezone correction #########
+##########      Table summary / ID   #########
 ##############################################
 
 library(ggplot2)
@@ -126,31 +125,18 @@ summary(dur)
 
 
 
-####################
-# monthly dives
-####################
-monthly = dep %>%
-  group_by(id, month) %>%
-  summarize(ntot           = n(),
-            dives0_20m     = n_distinct(depth<=20),
-            dives20_50m    = n_distinct(depth>20 & depth<=50),
-            dives50_100m   = n_distinct(depth>50 & depth<=100),
-            dives_sup100m  = n_distinct(depth>100)) %>%
-  ungroup()
-monthly
 
 
 
 
-
-#############################
-# track summary / ID
-#############################
+################################
+# summary from location dataset
+################################
 loc <- readRDS("./RDATA/0a.locations_filtered_17HP_tzCorrected.rds") %>%
   mutate(date  = as.Date(posix_local),
          hour  = substr(posix_local, 12, 13),
          month = format(date, "%b")) %>%
-  select(c(id,date,hour,lon,lat,month))
+  select(id,date,hour,lon,lat,month)
 loc = loc[order(loc$date, loc$id),] # reorder dates
 
 # change ID for individuals with similar PTT
@@ -161,66 +147,6 @@ loc$id[loc$id == "27262b"] = "27262b*"
 loc$id[loc$id == "22849b"] = "22849b*"
 loc$id[loc$id == "22850b"] = "22850b*"
 loc$id[loc$id == "27262"]  = "27262*"
-
-
-# tracking info: 
-# sex, length etc
-#----------------
-sum_track = loc %>%
-  group_by(id) %>%
-  summarise(Start = first(date),
-                   End   = last(date),
-                   Duration = difftime(last(date), first(date), units = "days")) %>%
-  arrange(Start) %>%
-  mutate("Sex" = c("F","F","F","M","F","F","F","F","M","F",
-                   "M","M","F","F","M","M","M"),
-         "Length" = c(120,166,126,125,150,129,150,140,152,135,
-                      120,149,125,123,130,140,145)) %>%
-  ungroup()
-sum_track
-
-# duration info
-#----------------
-sum_dur = dur %>%
-  filter(dur < 8) %>% # remove extreme long dives form HR dataset
-  group_by(id) %>%
-  summarise(Dive_dur = paste0(signif(mean(dur),3),
-                              "+",signif(sd(dur),3),
-                              " (",signif(max(dur),3),")")) %>%
-  ungroup()
-sum_dur
-
-
-# depth info
-#----------------
-sum_dep = dep %>%
-  group_by(id) %>%
-  summarise(ndive  = n(),
-            Dive_dep = paste0(signif(mean(depth),3),
-                              "+",signif(sd(depth),3),
-                              " (", signif(max(depth),3),")")) %>%
-  ungroup()
-sum_dep
-
-# combine the 3 tables
-#-------------------------
-table = sum_track %>%
-  left_join(sum_dep, by = "id") %>%
-  left_join(sum_dur, by = "id")
-table
-
-# generate temporary table
-#--------------------------
-webshot::install_phantomjs(force = TRUE)
-table %>%
-  kbl() %>% 
-  kable_classic(full_width=F, html_font="times") %>%
-  kable_styling(latex_options = c("HOLD_position"),
-                bootstrap_options = c("striped", "hover", "condensed"),
-                position = "center",
-                font_size = 18) %>% 
-  row_spec(0, bold=T)
-
 
 
 
@@ -242,15 +168,13 @@ dur = dur %>%
   mutate(day_departure = as.numeric(date - first(date)) + 1)
 
 
-#-------------------
 # prepare dataset
 #------------------- 
 table_loc = loc %>%
   group_by(id) %>%
   summarise(Start = first(date),
             End   = last(date),
-            ndays = round(as.numeric(difftime(
-              last(date), first(date),
+            ndays = round(as.numeric(difftime(last(date), first(date),
               units = "days")))) %>%
   arrange(Start) %>%
   mutate("Sex" = c("F","F","F","M","F","F","F","F","M","F",
@@ -331,8 +255,6 @@ table1 = table %>%
     by = c("id")
   )
 names(table1) 
-# View(table1)
-# table1$percent_dive_jul[1:8] = NA
 
 
 # draw table with sparklines
@@ -359,7 +281,6 @@ gt(table1) %>%
     sparkline_maxdepth ~ px(75),
     Dduration ~ px(105),
     sparkline_qt_dduration ~ px(75)
-    # everything() ~ px(270)
   )  %>%
   
   cols_align(align = "center") %>%

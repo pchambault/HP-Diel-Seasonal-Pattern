@@ -13,29 +13,26 @@ library(ggplot2)
 # load LR dataset
 #########################
 lr <- readRDS("./RDATA/0c.daylength_depth_LR_19ids_tzCorrected.RDS") %>%
-  dplyr::select(-c(sunrise,sunset))
-lr$month = as.numeric(substr(lr$date, 6, 7))
+  mutate(month = format(date, "%b")) 
 unique(lr$id) # 19 ids
+unique(lr$month)
 
 # select individuals with long tracking dataset 
-# at least 2 months, not only covering summer
+# at least 1 month, not only covering summer
 #------------------------------------------------
 lr %>%
   group_by(id) %>%
-  dplyr::summarise(start    = first(date),
-                   end      = last(date),
-                   duration = round(difftime(last(date), 
-                                             first(date), units="days")),
-                   ndives   = n()) 
+  summarise(start    = first(date),
+            end      = last(date),
+            duration = round(difftime(last(date), first(date), units="days")),
+            ndives   = n()) 
 lr = lr %>% 
-  filter(id != "22849", id != "22853",
-         id != "7617", id != "7618",
-         id != "24638",id != "37227", 
-         id != "37235",id != "22849b", id != "22850b", 
-         id != "27262", id != "27262b", id != "93100") # remove HR tags
-length(unique(lr$id)) # 8 ids
-summary(lr)
-
+  filter(id != "37235",id != "22849b", id != "22850b", # remove HR tags
+         id != "27262", id != "27262b", id != "93100", # remove HR tags
+         id != "22849", id != "22853",id != "37227",   # tracked < 1 month
+         id != "7617", id != "7618") %>% # removed because different depth bin settings
+  select(id,date,mean_dep,max_dep,daylength)
+unique(lr$id) 
 
 
 
@@ -46,13 +43,15 @@ summary(lr)
 # load HR dataset
 #########################
 hr <- readRDS("./RDATA/0b.daylength_depth_HR_5ids_tzCorrected.RDS") %>%
-  dplyr::select(-c(sunrise,sunset)) %>%
-  mutate(month = as.numeric(substr(date, 6, 7)))
-length(unique(hr$id))   # 5 ids
+  select(c(id,date,mean_dep,max_dep,daylength)) %>%
+  filter(id != "27262")
+length(unique(hr$id))   # 4 ids
 
+names(lr)
+names(hr)
 dive = rbind(lr, hr)
-length(unique(dive$id)) # 13 ids
-dive = dive[!is.na(dive$daylength),] # 1246 obs
+length(unique(dive$id)) # 12 ids
+dive = dive[!is.na(dive$daylength),] # 1230 obs
 
 
 
@@ -66,8 +65,8 @@ dive = dive[!is.na(dive$daylength),] # 1246 obs
 ###########################################
 # Create data 
 data <- dive %>% 
-  dplyr::select(-c(id, date, month)) %>%
-  rename('mean depth' = meandep, 'max depth' = maxdep)
+  dplyr::select(-c(id, date)) %>%
+  rename('mean depth' = mean_dep, 'max depth' = max_dep)
 
 # Function to return points and geom_smooth
 # allow for the method to be changed
@@ -99,7 +98,7 @@ ggpairs(data, title="Pairwise correlations between variables",
         panel.grid.minor = element_blank(),
         plot.margin = unit(c(0.1,0.1,0.2,0.3),"cm")) # t, r, b, l 
 
-ggsave(filename=paste0("./FIGURES/PAPER/SI/SI.Fig2.pdf"),
+ggsave(filename=paste0("./PAPER/4.PRSB/SI.Fig1.pdf"),
        width=5,height=5,units="in",dpi=400,family="ArialMT")
 
 

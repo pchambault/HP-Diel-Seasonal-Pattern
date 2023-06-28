@@ -1,6 +1,5 @@
 #########################################
-######  Statistics for paper      #######
-###### after time zone correction #######
+######    Statistics for paper    #######
 #########################################
 
 library(tidyverse)
@@ -8,7 +7,7 @@ library(tidyverse)
 
 
 ##################################################
-# graphical abstract:
+# Graphical abstract:
 # mean and maxdep in Jul and Dec for day vs night
 ##################################################
 
@@ -98,9 +97,9 @@ daily %>%
 # Fig.1: min and max sunrise and sunset
 #########################################
 
-#------------------
-# load lr dataset
-#------------------
+#---------------------
+# load low res dataset
+#---------------------
 lr <- readRDS("./RDATA/0c.daylength_depth_LR_19ids_tzCorrected.RDS")
 lr$month = as.numeric(substr(lr$date, 6, 7))
 unique(lr$id) # 19 ids
@@ -123,8 +122,8 @@ lr = lr %>%
          id != "27262", id != "27262b", id != "93100") # remove HR tags
 unique(lr$id) # 8 ids
 
-# load HR dataset
-#--------------------
+# load high res dataset
+#----------------------
 hr <- readRDS("./RDATA/0b.daylength_depth_HR_5ids_tzCorrected.RDS") %>%
   mutate(month = as.numeric(substr(date, 6, 7))) %>%
   filter(month != "Jan") %>%
@@ -191,7 +190,7 @@ kruskal.test(max_dep~month_num, daily)   # p<0.001, X2=30, df=5
 
 
 #############################################
-# mean maxdep
+# daily mean of maxdep
 #############################################
 mean(daily$max_dep)  # 236 m
 sd(daily$max_dep)    # 75 m
@@ -214,7 +213,7 @@ nrow(daily[daily$mean_dep>50,]) / nrow(daily) * 100  # 72%
 
 
 #############################################
-# mean dive duration (n=17 porpoises)
+# Mean dive duration (n=17 porpoises)
 #############################################
 
 # low resolution dataset
@@ -286,6 +285,7 @@ hourly
 
 
 # number of dives/hour (all depth class pooled)
+#-----------------------------------------------
 summary(hourly$ntot)          # mean: 17.4 dives/hour
 sd(hourly$ntot)               # mean: 6.7 dives/hour
 summary(hourly$ntot[hourly$month=="Jul"])     # mean: 14 dives/hour
@@ -296,10 +296,12 @@ summary(hourly$dives50_100m)  # mean: 3.3 dives/hour
 summary(hourly$dives_deep100m)# mean: 3.5 dives/hour
 
 # average number of shallow dives/hour (<20m) across months
+#----------------------------------------------------------
 summary(hourly$dives0_20m[hourly$month=="Jul"])     # mean: 7.0 dives/hour
 summary(hourly$dives0_20m[hourly$month=="Dec"])     # mean: 2 dives/hour
 
 # average number of deep dives/hour (>100 m) across months
+#----------------------------------------------------------
 summary(hourly$dives_deep100m[hourly$month=="Jul"]) # mean: 0.4 dives/hour
 summary(hourly$dives_deep100m[hourly$month=="Dec"]) # mean: 5.3 dives/hour
 

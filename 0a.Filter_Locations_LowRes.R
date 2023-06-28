@@ -38,7 +38,7 @@ loc <- read_excel("./DATA/HP_Satellite_data/HP_satellite-tag_data.xlsx",
   as_tibble() %>%
   dplyr::select(-c(DeployID)) %>%
   rename(id  = Ptt, instr = Instr, dateTime = Date, 
-         lc = Quality, lon = Longitude, lat = Latitude) 
+         lc  = Quality, lon = Longitude, lat = Latitude) 
 loc
 table(loc$id)
 
@@ -101,11 +101,11 @@ unique(wrong_dates$posix)
 
 wrong_dates %>%
   group_by(id) %>%
-  summarise(start = first(posix),  # ymd
-            end   = last(posix))   # ymd
+  summarise(start = first(posix),  
+            end   = last(posix))   
 
 # convert dates into POSIX
-wrong_dates$posix = as.POSIXct(strptime(wrong_dates$posix, # ymd
+wrong_dates$posix = as.POSIXct(strptime(wrong_dates$posix, 
                                  format="%Y-%d-%m %H:%M:%S"), 
                                tz="UTC")
 
@@ -154,7 +154,6 @@ shore     = north_map[north_map$region=="Greenland"
                       | north_map$region=="Iceland",]
 ggplot(shore, aes(long, lat)) +
   geom_point(data=loc, aes(lon,lat,colour=as.factor(id)), size=0.2) +
-  # coord_map("azequidistant", xlim=c(-65,-40), ylim=c(55,75)) +
   geom_polygon(aes(group=group), fill="lightgrey",linewidth=1) +
   theme_tq() +
   facet_wrap(~id, ncol=6) +
@@ -324,9 +323,11 @@ system.time({  # 45 sec
 })
 head(sun)
 
+# focus on year 2014 to get an idea of sunrise and sunset extremes
+#-----------------------------------------------------------------
 sun %>%
   mutate(year = format(date, "%Y")) %>%
-  filter(year == "2014") %>%  # focus on year 2014 to get an idea of sunrise and sunset extremes
+  filter(year == "2014") %>%  
   summarise(earliest_sunrise = min(sunrise),
             latest_sunrise   = max(sunrise),
             earliest_sunset  = max(sunset),
@@ -337,7 +338,6 @@ sun %>%
 loc2 = cbind(loc, sun[,c("sunrise","sunset","dusk",
                          "dawn","night","nightEnd")]) %>%
   as_tibble()
-names(loc2)
 
 # identify periods based on dusk, dawn, day and night hours
 #------------------------------------------------------------
@@ -359,7 +359,7 @@ rm(loc2)
 ################################
 # save dataset
 ################################
-dim(loc) # 13 521
+dim(loc) # 13,521
 setwd("/Users/philippinechambault/Documents/POST-DOC/2021/MSCA-GF/ANALYSES/HP-Diel-Seasonal-Pattern")
 saveRDS(loc, "./RDATA/0a.locations_filtered_17HP_tzCorrected.rds")
 

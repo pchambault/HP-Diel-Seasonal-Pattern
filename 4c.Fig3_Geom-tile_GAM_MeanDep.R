@@ -1,6 +1,6 @@
-##################################################
-### Fig. 3: GAM+geom_tile: mean_dep vs daylight ###
-##################################################
+################################################################
+### Fig. 3: GAM+geom_tile: mean of daily maxdep vs daylight  ###
+################################################################
 
 library(visreg)
 library(mgcv)
@@ -28,7 +28,7 @@ dat <- dive %>%
             lon     = mean(lon),
             lat     = mean(lat)) %>%
   ungroup()
-dat # 14,218 rows
+dat    # 14,218 rows
 
 
 
@@ -47,7 +47,7 @@ dat # 14,218 rows
 dataPlot2 = dive %>% 
   filter(id == "27262b") %>%
   group_by(date, hour) %>%
-  summarise(depth = mean(max_dep)) %>%
+  summarise(depth = mean(maxdep)) %>%
   ungroup()
 
 # extract sunrise and sunset
@@ -98,13 +98,13 @@ a = ggplot(dataPlot2, aes(x = date, y = hour)) +
                    xend = as.Date("2014-08-01"), yend = 21),
                arrow = arrow(length = unit(0.1, "cm"))) +
   theme(legend.position = c("bottom"),
-        legend.key.size = unit(1, 'cm'),       #change legend key size
-        legend.key.height = unit(0.3, 'cm'),   #change legend key height
-        legend.key.width = unit(0.5, 'cm'),    #change legend key width
+        legend.key.size = unit(1, 'cm'),         #change legend key size
+        legend.key.height = unit(0.3, 'cm'),     #change legend key height
+        legend.key.width = unit(0.5, 'cm'),      #change legend key width
         legend.title = element_text(size=8, 
                                     hjust = 0.5,
-                                    vjust = 0.5),   #change legend title font size
-        legend.text = element_text(size=8),    #change legend text font size
+                                    vjust = 0.5),#change legend title font size
+        legend.text = element_text(size=8),      #change legend text font size
         legend.background = element_blank(),
         legend.key = element_blank(),
         legend.margin = margin(t=-20),
@@ -122,6 +122,10 @@ a = ggplot(dataPlot2, aes(x = date, y = hour)) +
 
 
 
+
+
+
+
 #########################
 # panel b: dive duration
 #########################
@@ -131,7 +135,7 @@ a = ggplot(dataPlot2, aes(x = date, y = hour)) +
 dataPlot2 = dive %>% 
   filter(id == "27262b") %>%
   group_by(date, hour) %>%
-  summarise(dur = mean(dur/60)) %>%
+  summarise(dur = mean(dur/60)) %>% # in minutes
   ungroup()
 
 # plot panel b
@@ -162,13 +166,13 @@ b = ggplot(dataPlot2, aes(x = date, y = hour)) +
   labs(x = "", y = "Hour of the day (GMT-2)", fill = "Mean duration \n(min)", 
        title = "b) Dive duration (#27262b)") +
   theme(legend.position = c("bottom"),
-        legend.key.size = unit(1, 'cm'),       #change legend key size
-        legend.key.height = unit(0.3, 'cm'),   #change legend key height
-        legend.key.width = unit(0.5, 'cm'),    #change legend key width
+        legend.key.size = unit(1, 'cm'),          #change legend key size
+        legend.key.height = unit(0.3, 'cm'),      #change legend key height
+        legend.key.width = unit(0.5, 'cm'),       #change legend key width
         legend.title = element_text(size=8, 
                                     hjust = 0.5,
                                     vjust = 0.5), #change legend title font size
-        legend.text = element_text(size=8),    #change legend text font size
+        legend.text = element_text(size=8),       #change legend text font size
         legend.background = element_blank(),
         legend.key = element_blank(),
         legend.margin = margin(t=-20),
@@ -189,16 +193,22 @@ b = ggplot(dataPlot2, aes(x = date, y = hour)) +
 ################
 # panel c: GAM
 ################
+
+# import individual predictions
 ind_pred <- readRDS("./RDATA/3.GAM/Indiv-GAM_daylength_mean_dep_slope_intercept_all_tzCorr.rds")
+# import population predictions
 pop_pred <- readRDS("./RDATA/3.GAM/Pop-GAM_daylength_mean_dep_slope_intercept_all_tzCorr.rds")
+# import GAM output (summary to extract deviance)
 m <- readRDS("./RDATA/3.GAM/GAM_output_daylength_mean_dep_slope_intercept_all_tzCorr.rds")
 
+# plot
 c = ggplot(pop_pred, aes(x = daylength, y = fit_pop)) +
   geom_ribbon(aes(ymin=fit_pop-fit_pop_se,ymax=fit_pop+fit_pop_se),
               alpha=0.3, fill="dimgrey") +
   geom_line(colour="black",lwd=0.7) +
   geom_line(data=ind_pred, aes(daylength, fit_ind, group=id), 
             colour="dimgrey", lwd=0.5, alpha=0.4) +
+  ylim(0,120) +
   labs(y = "Daily mean depth (m)", x = "Daylength (hours)", 
        title="c) All individuals") +
   annotate("text", x = 8, y = 15, size = 3,
@@ -217,11 +227,11 @@ c = ggplot(pop_pred, aes(x = daylength, y = fit_pop)) +
         legend.margin=margin(t=-15),
         axis.title = element_text(size=8, hjust=0.5),
         panel.border = element_rect(colour="black",fill=NA,linewidth=0.2),
-        axis.text.x = element_text(angle = 0, size=8,
-                                   vjust = 0.5, hjust=0.5),
+        axis.text.x  = element_text(angle = 0, size=8,
+                                    vjust = 0.5, hjust=0.5),
         axis.text.y  = element_text(size=8, hjust=0.5),
         title = element_text(colour="black",size=10,face="bold"),
-        plot.title=element_text(size=10, vjust=0, hjust=0, # t r b l
+        plot.title=element_text(size=10, vjust=0, hjust=0, 
                                 colour="black"),
         panel.grid.major = element_blank(),
         panel.grid.minor = element_blank()) +
@@ -229,10 +239,13 @@ c = ggplot(pop_pred, aes(x = daylength, y = fit_pop)) +
 
 
 
+
+#############################
+# export plot with 3 panels
+#############################
 ((a / b) | c) + plot_layout(widths  = c(1.5, 1),
                             heights = c(1,2))
 ggsave(filename=paste0("./PAPER/4.PRSB/Fig.3.pdf"),
-       # width=7,height=4,units="in",
        width=190,height=110,units="mm",
        dpi=400,family="ArialMT")
 

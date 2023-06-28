@@ -31,7 +31,7 @@ lr <- read.csv("./DATA/HP_Low-Resolution_Dive_data/HP2017-Histos.csv") %>%
   relocate(date, .before = dateTime)
 
 names(lr)
-length(unique(lr$id))  # 15 porpoises! same ids for some, should be 12
+length(unique(lr$id))  # 15 porpoises! same ids used for some porpoises
 table(lr$id)
 table(lr$instr)
 # Mk10 Splash 
@@ -66,7 +66,7 @@ detach("package:janitor", unload = TRUE)
 # depth class in m: 0; 5; 10; 15; 20; 25; 30; 40; 50; 60; 70; 80; 90; >90
 lr %>% filter(year == "2012") %>% summarise(n = n_distinct(id)) # 2 HPs
 subset = lr %>% filter(id == "7617" | id == "7618")  
-unique(subset$id) # 7617 7618
+unique(subset$id) # 7617 and 7618
 
 #---------------
 ## dive depth ##
@@ -352,7 +352,7 @@ table(dur2014$class)
 
 
 #########################################
-# combine datasets from the 3 years
+# Combine datasets from the 3 years
 #########################################
 dep = rbind(dep2012, dep2013, dep2014)
 dur = rbind(dur2012, dur2013, dur2014)
@@ -397,7 +397,7 @@ dur$year = substr(dur$date, 1, 4)
 
 
 #################################################
-# correct time zone for each coordinate
+# Correct time zone for each coordinate
 # for depth dataset
 # in summer: UTC-2 West Greenland
 # in winter: UTC-3 West Greenland
@@ -456,7 +456,7 @@ table(dur2$timezone)
 
 
 #############################################
-# extract sunrise/sunset for depth
+# Extract sunrise/sunset for depth
 #############################################
 dep2 = dep2 %>%
   mutate(date = as.Date(substr(posix_local, 1, 10))) %>%
@@ -494,7 +494,7 @@ time1 = time1 %>%
 
 
 ## tz=Etc/GMT+2 ##
-#--------------------------
+#------------------
 time2 = dep2 %>%
   filter(timezone == "Etc/GMT+2") 
 time2 = time2 %>%
@@ -591,7 +591,7 @@ dep2 -> dep
 
 
 #############################################
-# extract sunrise/sunset for duration
+# Extract sunrise/sunset for duration
 #############################################
 dur2 = dur2 %>%
   mutate(date = as.Date(substr(posix_local, 1, 10))) %>%
@@ -629,7 +629,7 @@ time1 = time1 %>%
 
 
 ## tz=Etc/GMT+2 ##
-#--------------------------
+#------------------
 time2 = dur2 %>%
   filter(timezone == "Etc/GMT+2") 
 time2 = time2 %>%
@@ -737,10 +737,10 @@ dur  = dur %>% filter(n!=0)
 
 
 #########################################
-# reshape tibbles to get 1 row=1 dive
+# Reshape tibbles to get 1 row=1 dive
 #########################################
 dep$depth = as.numeric(gsub("([0-9]+).*$", "\\1", dep$class))
-summary(dep$depth) # 0 to 450 m
+summary(dep$depth)   # 0 to 450 m
 dep2 = dep %>% uncount(n)
 dep2 %>% dplyr::select(id, posix_local, depth, class)
 dep  %>% dplyr::select(id, posix_local, depth, class, n) %>% slice_head()
@@ -789,11 +789,11 @@ daylength = dep %>%
   mutate(day_depart = as.numeric(date - first(date)) + 1) %>%
   filter(day_depart != 1) %>%  # remove first day because never complete (starts in the middle of day)
   group_by(id, date) %>%
-  summarise(sunrise   = first(sunrise),
-            sunset    = first(sunset),
-            mean_dep   = mean(depth),
-            max_dep    = max(depth)) %>%
-  mutate(daylength = as.numeric(difftime(sunset, sunrise, units = "hour"))) %>%
+  summarise(sunrise  = first(sunrise),
+            sunset   = first(sunset),
+            mean_dep = mean(depth),
+            max_dep  = max(depth)) %>%
+  mutate(daylength   = as.numeric(difftime(sunset, sunrise, units = "hour"))) %>%
   ungroup()
 daylength
 length(unique(daylength$id)) # 19 ids
