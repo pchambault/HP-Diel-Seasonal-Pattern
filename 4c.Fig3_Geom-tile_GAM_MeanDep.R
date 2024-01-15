@@ -79,14 +79,14 @@ a = ggplot(dataPlot2, aes(x = date, y = hour)) +
                      breaks=c(0,4,8,12,16,20,23),
                      expand = c(0, 0)) +
   geom_line(data=sunrise, aes(x = date, y = hour), 
-             size=0.5, colour="black") + 
+            linewidth=0.5, colour="black") + 
   geom_line(data=sunset, aes(x = date, y = hour), 
-             size=0.5, colour="black") + 
+            linewidth=0.5, colour="black") + 
   scale_fill_viridis_c(option = "magma", direction = -1) +
   theme_tq() +
   labs(x = "", y = "Hour of the day (GMT-2)", 
        fill = "Mean depth \n(m)", 
-       title = "a) Dive depth (#27262b)") +
+       title = "a) Dive depth", subtitle = "(#27262b)") +
   annotate("text", y = 9, x=as.Date("2014-08-01"), 
            label = "Sunrise", size=2, colour="black") +
   geom_segment(aes(x = as.Date("2014-08-01"), y = 8,
@@ -148,9 +148,9 @@ b = ggplot(dataPlot2, aes(x = date, y = hour)) +
                      breaks=c(0,4,8,12,16,20,23),
                      expand = c(0, 0)) +
   geom_line(data=sunrise, aes(x = date, y = hour), 
-            size=0.5, colour="black") + 
+            linewidth=0.5, colour="black") + 
   geom_line(data=sunset, aes(x = date, y = hour), 
-            size=0.5, colour="black") + 
+            linewidth=0.5, colour="black") + 
   scale_fill_viridis_c(option = "magma", direction = -1) +
   theme_tq() +
   annotate("text", y = 9, x=as.Date("2014-08-01"), 
@@ -164,7 +164,7 @@ b = ggplot(dataPlot2, aes(x = date, y = hour)) +
                    xend = as.Date("2014-08-01"), yend = 21),
                arrow = arrow(length = unit(0.1, "cm"))) +
   labs(x = "", y = "Hour of the day (GMT-2)", fill = "Mean duration \n(min)", 
-       title = "b) Dive duration (#27262b)") +
+       title = "b) Dive duration", subtitle = "(#27262b)") +
   theme(legend.position = c("bottom"),
         legend.key.size = unit(1, 'cm'),          #change legend key size
         legend.key.height = unit(0.3, 'cm'),      #change legend key height
@@ -190,14 +190,27 @@ b = ggplot(dataPlot2, aes(x = date, y = hour)) +
 
 
 
+
+
+
+
 ################
 # panel c: GAM
 ################
 
 # import individual predictions
 ind_pred <- readRDS("./RDATA/3.GAM/Indiv-GAM_daylength_mean_dep_slope_intercept_all_tzCorr.rds")
+unique(ind_pred$id)   # 12 individuals (4 HR tags, 8 LR tags)
+ind_pred = ind_pred %>%
+  mutate(type = case_when(id == "22849b" ~ "High-resolution",
+                          id == "27262b" ~ "High-resolution",
+                          id == "22850b" ~ "High-resolution",
+                          id == "93100"  ~ "High-resolution",
+                          TRUE ~ "Low-resolution"))
+
 # import population predictions
 pop_pred <- readRDS("./RDATA/3.GAM/Pop-GAM_daylength_mean_dep_slope_intercept_all_tzCorr.rds")
+
 # import GAM output (summary to extract deviance)
 m <- readRDS("./RDATA/3.GAM/GAM_output_daylength_mean_dep_slope_intercept_all_tzCorr.rds")
 
@@ -206,18 +219,26 @@ c = ggplot(pop_pred, aes(x = daylength, y = fit_pop)) +
   geom_ribbon(aes(ymin=fit_pop-fit_pop_se,ymax=fit_pop+fit_pop_se),
               alpha=0.3, fill="dimgrey") +
   geom_line(colour="black",lwd=0.7) +
-  geom_line(data=ind_pred, aes(daylength, fit_ind, group=id), 
-            colour="dimgrey", lwd=0.5, alpha=0.4) +
+  geom_line(data=ind_pred, aes(daylength, fit_ind, group=id, colour=type), 
+            lwd=0.5) +
+  scale_colour_brewer(palette = "Set2") +
+  geom_line(data=pop_pred, aes(daylength, fit_pop), 
+            colour="black", lwd=0.5) +
+  geom_ribbon(data=pop_pred, 
+              aes(ymin=fit_pop-fit_pop_se,ymax=fit_pop+fit_pop_se),
+              alpha=0.3, fill="dimgrey") +
   ylim(0,120) +
   labs(y = "Daily mean depth (m)", x = "Daylength (hours)", 
-       title="c) All individuals") +
-  annotate("text", x = 8, y = 15, size = 3,
+       title = "c) Generalized Additive Model",
+       subtitle = "(12 individuals)") +
+  annotate("text", x = 8, y = 10, size = 2.5,
            label = paste0("Deviance: ",
                           round(as.numeric(summary.gam(m)[14])*100),"%")) +
   theme_tq() +
   theme(legend.key.size = unit(6,"cm"),
         legend.key.width = unit(0.5,"cm"),
         legend.key.height = unit(0.5,"cm"),
+        legend.position = c(0.3, 0.2),
         legend.title = element_blank(),
         legend.text = element_text(size=8),
         legend.box.spacing = unit(0.1,'cm'),
@@ -245,7 +266,7 @@ c = ggplot(pop_pred, aes(x = daylength, y = fit_pop)) +
 #############################
 ((a / b) | c) + plot_layout(widths  = c(1.5, 1),
                             heights = c(1,2))
-ggsave(filename=paste0("./PAPER/4.PRSB/Fig.3.pdf"),
+ggsave(filename=paste0("./PAPER/5.SciRep/3.Review_Dec2023/Fig.3.pdf"),
        width=190,height=110,units="mm",
        dpi=400,family="ArialMT")
 

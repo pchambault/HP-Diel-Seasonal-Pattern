@@ -30,7 +30,7 @@ summary(temp$thetao).   # -1.1 to 8.7
 ggplot(temp, aes(y=thetao, x=maxdep)) +
   geom_point(colour="black", size = 1, stroke = 0, alpha=0.3) +
   geom_smooth(method = "gam", colour = "brown2", 
-              fill = "brown1", linewidth = 0.6) +
+              fill = NA, linewidth = 0.6) +
   scale_color_brewer(palette = "Dark2") +
   coord_flip() +
   scale_x_continuous(trans = "reverse", limits = c(380, 0)) +
@@ -42,6 +42,8 @@ ggplot(temp, aes(y=thetao, x=maxdep)) +
 
 ggsave(filename=paste0("./PAPER/5.SciRep/2.Review_Sep2023/Fig.4.pdf"),
        width=190,height=110,units="mm",dpi=400,family="ArialMT")
+ggsave(filename=paste0("./PAPER/5.SciRep/2.Review_Sep2023/Fig.4.png"),
+       width=190,height=110,units="mm",dpi=400)
 
 
 

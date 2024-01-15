@@ -122,7 +122,8 @@ res(bathy)  # 0.03 decimal deg
 #------------------------------
 bathy_df = rasterToPoints(bathy) %>% 
   as_tibble() %>% 
-  rename(lon = x, lat = y) %>%
+  rename(lon = x, 
+         lat = y) %>%
   mutate(layer = abs(layer))
 
 # plot panel a
@@ -143,13 +144,13 @@ a = ggplot(shore, aes(long, lat)) +
   annotate("text", y = 79, x=-42, 
            label = "Greenland", size=3, colour="black") +
   annotate("text", y = 65.35, x=-47, 
-           label = "Maniitsoq", size=2, colour="red") +
+           label = "Maniitsoq", size=3, colour="red") +
   annotate("text", y = 75, x=-40, 
-           label = paste0(length(unique(loc$id))," individuals"), size=2) +
+           label = paste0(length(unique(loc$id))," individuals"), size=3) +
   annotate("text", y = 74, x=-40, 
-           label = paste0(nrow(loc)," locations"), size=2) +
+           label = paste0(nrow(loc)," locations"), size=3) +
   annotate("text", y = 73, x=-40, 
-           label = paste0(sum(table$ndive)," dives"), size=2) +
+           label = paste0(sum(table$ndive)," dives"), size=3) +
   geom_hline(yintercept = 66, colour = "blue", 
              linewidth = 0.3, linetype=2) +
   labs(y = "Latitude (°N)", x = "Longitude (°W)", 
@@ -170,7 +171,7 @@ a = ggplot(shore, aes(long, lat)) +
         panel.border = element_rect(colour="black",fill=NA,linewidth=0.2),
         title = element_text(colour="black",size=10,face="bold"),
         panel.background = element_blank(),
-        panel.grid.major = element_line(colour="gray52", size=0.1),
+        panel.grid.major = element_line(colour="gray52", linewidth=0.1),
         plot.margin = unit(c(0.1,-0.2,0.2,0.1), "cm")) +  # top,right,bottom,left
   guides(fill = guide_legend(nrow = 3))
 
@@ -246,22 +247,22 @@ b = ggplot(shore, aes(long, lat)) +
   annotate("text", y = 79, x=-42, 
            label = "Greenland", size=3, colour="black") +
   annotate("text", y = 65.35, x=-47, 
-           label = "Maniitsoq", size=2, colour="red") +
+           label = "Maniitsoq", size=3, colour="red") +
   annotate("text", y = 75, x=-40,
-           label = "Mean daylength: 19h", size=2) +
+           label = "Mean daylength: 19h", size=3) +
   annotate("text", y = 74, x=-40,
            label = paste0("Mean sunrise: ",
-                          substr(mean(sun$mean_sunrise),12,16)), size=2) +
+                          substr(mean(sun$mean_sunrise),12,16)), size=3) +
   annotate("text", y = 73, x=-40,
            label = paste0("Mean sunset: ",
-                          substr(mean(sun$mean_sunset),12,16)), size=2) +
+                          substr(mean(sun$mean_sunset),12,16)), size=3) +
   annotate("text", y = 72, x=-40,
            label = paste0(length(unique(loc$id[loc$month=="Jul"])),
-                          " individuals"), size=2) +
-  annotate("text", y = 71, x=-40, size=2,
+                          " individuals"), size=3) +
+  annotate("text", y = 71, x=-40, size=3,
            label = paste0(nrow(loc[loc$month=="Jul",])," locations")) +
   annotate("text", y = 70, x=-40.1, 
-           label = paste0(ndive_jul," dives"), size=2) +
+           label = paste0(ndive_jul," dives"), size=3) +
   geom_hline(yintercept = 66, colour = "blue", 
              linewidth = 0.3, linetype=2) +
   labs(y = "", x = "Longitude (°W)", title = "b) July", 

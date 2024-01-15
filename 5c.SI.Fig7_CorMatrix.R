@@ -1,5 +1,5 @@
 ###########################################
-####     SI FIGURE 1 Cor matrix   #########
+####     SI FIGURE 7: Cor matrix  #########
 ###########################################
 
 
@@ -98,7 +98,7 @@ ggpairs(data, title="Pairwise correlations between variables",
         panel.grid.minor = element_blank(),
         plot.margin = unit(c(0.1,0.1,0.2,0.3),"cm")) # t, r, b, l 
 
-ggsave(filename=paste0("./PAPER/4.PRSB/SI.Fig1.pdf"),
+ggsave(filename=paste0("./PAPER/5.SciRep/3.Review_Dec2023/SI/SI.Fig7.pdf"),
        width=5,height=5,units="in",dpi=400,family="ArialMT")
 
 

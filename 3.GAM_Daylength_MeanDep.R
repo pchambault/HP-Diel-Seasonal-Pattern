@@ -41,9 +41,9 @@ lr = lr %>%
          id != "27262", id != "27262b", id != "93100", # remove HR tags
          id != "22849", id != "22853",id != "37227",   # tracked < 1 month
          id != "7617", id != "7618") %>% # removed because different depth bin settings
-  select(id,date,mean_dep,max_dep,daylength,month,sunrise,sunset)
+  dplyr::select(id,date,mean_dep,max_dep,daylength,month,sunrise,sunset)
          
-unique(lr$id) 
+unique(lr$id)  # 8 ids
 summary(lr)
 table(lr$month)
 
@@ -56,7 +56,7 @@ table(lr$month)
 hr <- readRDS("./RDATA/0b.daylength_depth_HR_5ids_tzCorrected.RDS") %>%
   mutate(month = format(date, "%b")) %>%
   filter(month != "Jan")  %>%
-  select(c(id,date,mean_dep,max_dep,daylength,month,sunrise,sunset)) %>%
+  dplyr::select(c(id,date,mean_dep,max_dep,daylength,month,sunrise,sunset)) %>%
   filter(id != "27262")   # removed because tracked for < 1 month
 hr %>%
   group_by(id) %>%
@@ -65,7 +65,7 @@ hr %>%
             duration = round(difftime(last(date), first(date), units="days")),
             ndives   = n()) 
 
-unique(hr$id)                     # 4 ids
+unique(hr$id)              # 4 ids
 
 # aggregate both datasets
 names(lr)
