@@ -1,5 +1,5 @@
 ############################################################################
-#####                SI PAPER Fig          #########
+#####         SI FIG 1: Individual maps of locs with Bathy         #########
 ############################################################################
 
 library(ncdf4)
@@ -66,46 +66,5 @@ ggplot(shore, aes(long, lat)) +
 ggsave(filename="./PAPER/5.SciRep/2.Review_Sep2023/SI/SI_Fig.1.png",
        width=200,height=120,units="mm",dpi=400) 
 
-
-
-
-
-
-
-
-# # discrete variable
-# #---------------------
-# ggplot(shore, aes(long, lat)) +
-#   geom_point(data=dive, aes(lon,lat,colour=bathy_cut), size=0.1) +
-#   coord_map("azequidistant", xlim=c(-60,-40), ylim=c(60,72)) +
-#   geom_polygon(aes(group=group), fill="lightgrey",lwd=1) +
-#   # scale_colour_brewer(palette = "Blues") +
-#   scale_colour_manual(values = c("#cedbe3","#6d94ac","#3d7090","#0c4c74")) +
-#   facet_wrap(~id, ncol=3) + 
-#   labs(x="", y="", colour = "Bathymetry \n(m)") +
-#   theme_tq() +
-#   theme(plot.margin = unit(c(0,0,0,0), "cm"),
-#         panel.spacing.x  = unit(0.2, "lines"),
-#         panel.spacing.y  = unit(0.0, "lines")) +  
-#   guides(colour = guide_legend(nrow = 3, 
-#                                override.aes = list(size=5)))
-# 
-# 
-# 
-# # continuous variable
-# #-----------------------
-# ggplot(shore, aes(long, lat)) +
-#   geom_point(data=dive, aes(lon,lat,colour=bathy), size=0.1) +
-#   coord_map("azequidistant", xlim=c(-60,-40), ylim=c(60,72)) +
-#   geom_polygon(aes(group=group), fill="lightgrey",lwd=1) +
-#   # scale_colour_gradient2() +
-#   scale_colour_viridis() +
-#   # scale_fill_gradient(low = "yellow", high = "red", na.value = NA) +
-#   facet_wrap(~id, ncol=3) + 
-#   labs(x="", y="") +
-#   theme_tq() +
-#   theme(plot.margin = unit(c(0,0,0,0), "cm"),
-#         panel.spacing.x  = unit(0.2, "lines"),
-#         panel.spacing.y  = unit(0.0, "lines")) 
 
 
