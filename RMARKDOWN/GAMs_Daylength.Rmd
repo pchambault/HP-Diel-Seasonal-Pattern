@@ -1,0 +1,490 @@
+---
+title: "GAMs with daylength"
+author: "Philippine Chambault"
+date: "2023-06-27"
+output:
+  bookdown::html_document2:
+    number_sections: yes
+    code_folding: show
+    df_print: default
+    fig_caption: yes
+    toc: yes
+    toc_float:
+      collapsed: yes
+      smooth_scroll: no
+---
+
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(
+  echo      = TRUE,
+  fig.align = "center",
+  message = FALSE,
+  warning = FALSE,
+  # cache   = FALSE,
+  out.width = "100%"
+)
+```
+
+
+```{r, global_options, include=FALSE}
+library(mgcv)
+library(ggcorrplot)
+library(ggplot2)
+library(tidyquant)
+library(gridExtra)
+library(tidyverse)
+library(dplyr)
+library(viridis)
+library(DT)
+library(data.table)
+library(GGally)
+```
+
+
+* Context: obtained different results with the GAMs late June when checking the code, especially some gaps in the predicted values for depth between 110 and 144 m.
+* Objective: investigate why such weird residuals.
+* changes made compared to previous version (before June 2023):
+- retained only months from Jun to Dec for LR dataset
+- removed from HR dataset id 27262 that was tracked for less than 1 month
+- recalculated mean_dep for HR dataset: previously was mean(mean_dep) instead of mean(max_dep)
+- obtained higher deviance but weird residuals
+
+
+
+
+```{r, echo=F}
+# load low resolution dataset
+# keep ids tracked for at least 1 month
+#---------------------------------------
+lr <- readRDS("./RDATA/0c.daylength_depth_LR_19ids_tzCorrected.RDS") %>%
+  mutate(month = format(date, "%b")) 
+
+lr %>%
+  group_by(id) %>%
+  summarise(start    = first(date),
+            end      = last(date),
+            duration = round(difftime(last(date), first(date), units="days")),
+            ndives   = n()) 
+lr = lr %>% 
+  filter(id != "37235",id != "22849b", id != "22850b", # remove HR tags
+         id != "27262", id != "27262b", id != "93100", # remove HR tags
+         id != "22849", id != "22853",
+         id != "37227", id != "37228", id != "27261",  # according to geom_smooth
+         id != "7617", id != "7618") %>%
+  select(c(id,date,mean_dep,max_dep,daylength,month,sunrise,sunset)) 
+         
+# load HR dataset
+#-----------------
+hr <- readRDS("./RDATA/0b.daylength_depth_HR_5ids_tzCorrected.RDS") %>%
+  mutate(month = format(date, "%b")) %>%
+  filter(month != "Jan")  %>%
+  select(c(id,date,mean_dep,max_dep,daylength,month,sunrise,sunset)) %>%
+  filter(id != "27262")   # remove this id because tracked over only one month
+hr %>%
+  group_by(id) %>%
+  summarise(start    = first(date),
+            end      = last(date),
+            duration = round(difftime(last(date), first(date), units="days")),
+            ndives   = n()) 
+
+dat = rbind(lr, hr)
+length(unique(dat$id))        
+dat = dat[!is.na(dat$daylength),] 
+```
+
+
+
+
+
+
+# Depth vs daylength from raw data {.tabset}
+
+## mean_dep
+```{r, echo=FALSE, fig.pos="placeHere", fig.height=4, fig.cap="Relationship between daily mean depth (from max_dep/dive) and daylengtn."}
+ggplot(dat, aes(y=mean_dep, x=daylength)) +
+  geom_point(size = 0.5) +
+  geom_smooth() +
+  facet_wrap(~id, ncol=5) +
+  theme_tq()
+```
+
+## max_dep
+```{r, echo=FALSE, fig.pos="placeHere", fig.height=4, fig.cap="Relationship between daily max depth and daylengtn."}
+ggplot(dat, aes(y=max_dep, x=daylength)) +
+  geom_point(size = 0.5) +
+  geom_smooth() +
+  facet_wrap(~id, ncol=5) +
+  theme_tq()
+```
+
+
+
+
+
+# Pairwise colinearity
+```{r, echo=F}
+# Create data 
+data <- dat %>% dplyr::select(-c(id,date,month,sunrise,sunset)) 
+
+# Function to return points and geom_smooth
+# allow for the method to be changed
+my_fn <- function(data, mapping, method="loess", ...){
+  p <- ggplot(data = data, mapping = mapping) + 
+    geom_point(size = 0.3) + 
+    geom_smooth(method=method, ..., size = 0.4)
+  p
+}
+```
+
+```{r, echo=FALSE, fig.pos="placeHere", fig.height=4, fig.cap="Pairwise correlations between variables."}
+ggpairs(data, 
+        lower = list(continuous = my_fn), 
+        upper = list(continuous = wrap("cor", size = 2))) +
+  theme_tq()
+```
+
+
+
+
+
+
+# Simple GAM with mean_dep {.tabset}
+## Output
+* Good deviance even though slightly lower than before.
+```{r, echo=F}
+dat$id = as.factor(dat$id)
+m = gam(mean_dep ~ s(daylength, k=5) + 
+          s(id, bs = 're') +            # random intercept
+          s(daylength, id, bs = 're'),  # random slope
+        data = dat, method="REML")
+summary(m) 
+```
+
+## Smooth curves
+* Good fit
+```{r, echo=FALSE, fig.pos="placeHere", fig.height=5.5, fig.cap="GAM output using mean_dep, ID on slope and intercept."}
+plot(m,pages=1, shade=T)
+```
+
+## Residuals
+* Good fit.
+```{r, echo=FALSE, fig.pos="placeHere", fig.height=5.5, fig.cap="Diagnostic plots using mean_dep."}
+par(mfrow=c(2,2),mar=c(6,5,6,3))
+qq.gam(m,cex=1,pch=20)
+hist(residuals(m), xlab="Residuals", main="Histogram of residuals")
+observed.y <- napredict(m$na.action, m$y)
+plot(fitted(m), observed.y, pch=20, xlab = "Fitted Values",
+     ylab = "Response", main = "Response vs. Fitted Values")
+acf(resid(m),lag.max=200, main="Autocorrelation")
+```
+
+## Individual and population curves
+```{r, echo=F}
+# predictions at individual level
+#----------------------------------
+ind_pred_inter <- expand.grid(daylength = as.numeric(3:max(dat$daylength,na.rm=T)),
+                              id = unique(dat$id))
+
+# add group_to_compare column
+ind_pred <- ind_pred_inter %>%
+  # set as data.table
+  setDT(.) %>% 
+  # sort by group_to_compare, time and id
+  .[order(daylength, id),] %>%
+  # add individual prediction
+  .[, fit_ind := predict.gam(m,
+                             .SD,
+                             type = "response")] %>%
+  # add individual SE
+  .[, se_ind := predict.gam(m,
+                            .SD,
+                            se.fit=TRUE,
+                            type = "response")$se.fit] %>%
+  # sort by group_to_compare, time and id
+  .[order(daylength, id),] %>%
+  # trick to avoid calling twice this object in the console for display
+  .[]
+
+
+#----------------------------------
+# predictions at population level
+#----------------------------------
+pop_pred <- setDT(
+  expand.grid(
+    daylength = as.numeric(3:max(dat$daylength,na.rm=T)),
+    id = "population_level",
+    stringsAsFactors = FALSE
+  )
+) %>%
+  # sort by group_to_compare, time and id
+  .[order(daylength, id),] %>%
+  # retrieve population prediction
+  .[, fit_pop := predict.gam(m,
+                             # select the best individual by group_to_compare
+                             ind_pred[, .SD[id == "22849b"]],#first(id)
+                             type = "response",
+                             exclude = c("s(id)",
+                                         "s(daylength,id)"))] %>%
+  # add standard error at the population level
+  .[, fit_pop_se := predict.gam(
+    m,
+    # select the first individual by group_to_compare
+    ind_pred[, .SD[id == "22849b"]],
+    type = "response",
+    exclude = c("s(id)",
+                "s(daylength,id)"),
+    se.fit = T
+  )$se.fit] %>%
+  # trick to avoid calling twice this object in the console for display
+  .[]
+pop_pred = as_tibble(pop_pred)
+```
+
+* Similar curve as before
+```{r, echo=FALSE, fig.pos="placeHere", fig.height=5.5, fig.cap="Individual and population smooth curves using daily mean_dep."}
+ggplot(pop_pred, aes(x = daylength, y = fit_pop)) +
+  geom_ribbon(aes(ymin=fit_pop-fit_pop_se,ymax=fit_pop+fit_pop_se),
+              alpha=0.3, fill="mediumseagreen") +
+  geom_line(colour="mediumseagreen",lwd=1) +
+  geom_line(data=ind_pred, aes(daylength, fit_ind, group=id), 
+            colour="mediumseagreen", lwd=0.5, alpha=0.4) +
+  ylim(0,120) +
+  # geom_point(data=dat, aes(y=mean_dep, x=daylength), alpha=0.3, size=0.5) +
+  labs(y = "Daily mean depth (m)", x = "Daylength (hours)") +
+  theme_tq()
+```
+
+
+
+
+
+# Simple GAM with max_dep {.tabset}
+## Output
+* Ok deviance.
+```{r, echo=F}
+m = gam(max_dep ~ s(daylength, k=5) + 
+          s(id, bs = 're') +            # random intercept
+          s(daylength, id, bs = 're'),  # random slope
+        data = dat, method="REML")
+summary(m) 
+```
+
+## Smooth curves
+* Ok fit for the random intercept, except for 2 IDs.
+* Better fit with meandep.
+```{r, echo=FALSE, fig.pos="placeHere", fig.height=5.5, fig.cap="GAM output using max_dep, ID on slope and intercept."}
+plot(m,pages=1, shade=T)
+```
+
+## Residuals
+* Ok residuals
+```{r, echo=FALSE, fig.pos="placeHere", fig.height=5.5, fig.cap="Diagnostic plots using max_dep."}
+par(mfrow=c(2,2),mar=c(6,5,6,3))
+qq.gam(m,cex=1,pch=20)
+hist(residuals(m), xlab="Residuals", main="Histogram of residuals")
+observed.y <- napredict(m$na.action, m$y)
+plot(fitted(m), observed.y, pch=20, xlab = "Fitted Values",
+     ylab = "Response", main = "Response vs. Fitted Values")
+acf(resid(m),lag.max=200, main="Autocorrelation")
+```
+
+
+## Individual and population curves
+```{r, echo=F}
+#----------------------------------
+# predictions at individual level
+#----------------------------------
+ind_pred_inter <- expand.grid(daylength = as.numeric(3:max(dat$daylength,na.rm=T)),
+                              id        = unique(dat$id))
+
+# add group_to_compare column
+ind_pred <- ind_pred_inter %>%
+  # set as data.table
+  setDT(.) %>% 
+  # sort by group_to_compare, time and id
+  .[order(daylength, id),] %>%
+  # add individual prediction
+  .[, fit_ind := predict.gam(m,
+                             .SD,
+                             type = "response")] %>%
+  # add individual SE
+  .[, se_ind := predict.gam(m,
+                            .SD,
+                            se.fit=TRUE,
+                            type = "response")$se.fit] %>%
+  # sort by group_to_compare, time and id
+  .[order(daylength, id),] %>%
+  # trick to avoid calling twice this object in the console for display
+  .[]
+
+
+#----------------------------------
+# predictions at population level
+#----------------------------------
+pop_pred <- setDT(
+  expand.grid(
+    daylength = as.numeric(3:max(dat$daylength,na.rm=T)),
+    id = "population_level",
+    stringsAsFactors = FALSE
+  )
+) %>%
+  # sort by group_to_compare, time and id
+  .[order(daylength, id),] %>%
+  # retrieve population prediction
+  .[, fit_pop := predict.gam(m,
+                             # select the best individual by group_to_compare
+                             ind_pred[, .SD[id == "22849b"]],#first(id)
+                             type = "response",
+                             exclude = c("s(id)",
+                                         "s(daylength,id)"))] %>%
+  # add standard error at the population level
+  .[, fit_pop_se := predict.gam(
+    m,
+    # select the first individual by group_to_compare
+    ind_pred[, .SD[id == "22849b"]],
+    type = "response",
+    exclude = c("s(id)",
+                "s(daylength,id)"),
+    se.fit = T
+  )$se.fit] %>%
+  # trick to avoid calling twice this object in the console for display
+  .[]
+pop_pred = as_tibble(pop_pred)
+```
+
+* Ok trend but slope less pronounced than the one using mean depth.
+```{r, echo=FALSE, fig.pos="placeHere", fig.height=5.5, fig.cap="Individual and population smooth curves using daily max_dep."}
+ggplot(pop_pred, aes(x = daylength, y = fit_pop)) +
+  geom_ribbon(aes(ymin=fit_pop-fit_pop_se,ymax=fit_pop+fit_pop_se),
+              alpha=0.3, fill="mediumseagreen") +
+  geom_line(colour="mediumseagreen",lwd=1) +
+  geom_line(data=ind_pred, aes(daylength, fit_ind, group=id), 
+            colour="mediumseagreen", lwd=0.5, alpha=0.4) +
+  ylim(0,400) +
+  # geom_point(data=dat, aes(y=mean_dep, x=daylength), alpha=0.3, size=0.5) +
+  labs(y = "Daily max depth (m)", x = "Daylength (hours)") +
+  theme_tq()
+```
+
+
+
+
+
+# Simple GAM with mean of mean_dep {.tabset}
+```{r, echo=F}
+hr2 <- readRDS("./RDATA/0b.daylength_depth_HR_5ids_tzCorrected.RDS") %>%
+  mutate(month = format(date, "%b")) %>%
+  filter(month != "Jan")  %>%
+  select(c(id,date,mean_meandep,max_dep,daylength,month,sunrise,sunset)) %>%
+  rename(mean_dep = mean_meandep) %>%
+  filter(id != "27262")   # remove this id because tracked over only one month
+dat = rbind(lr, hr2)    
+dat = dat[!is.na(dat$daylength),]
+dat$id = as.factor(dat$id)
+```
+
+## Output
+* Higher deviance than the one using mean of maxdep.
+```{r, echo=F}
+m = gam(mean_dep ~ s(daylength, k=5) + 
+          s(id, bs = 're') +            
+          s(daylength, id, bs = 're'),  
+        data = dat, method="REML")
+summary(m) 
+```
+
+## Smooth curves
+* Good fit
+```{r, echo=FALSE, fig.pos="placeHere", fig.height=5.5, fig.cap="GAM output using mean of mean_dep, ID on slope and intercept."}
+plot(m,pages=1, shade=T)
+```
+
+## Residuals
+* Good fit
+```{r, echo=FALSE, fig.pos="placeHere", fig.height=5.5, fig.cap="Diagnostic plots using mean of mean_dep."}
+par(mfrow=c(2,2),mar=c(6,5,6,3))
+qq.gam(m,cex=1,pch=20)
+hist(residuals(m), xlab="Residuals", main="Histogram of residuals")
+observed.y <- napredict(m$na.action, m$y)
+plot(fitted(m), observed.y, pch=20, xlab = "Fitted Values",
+     ylab = "Response", main = "Response vs. Fitted Values")
+acf(resid(m),lag.max=200, main="Autocorrelation")
+```
+
+
+## Individual and population curves
+```{r, echo=F}
+#----------------------------------
+# predictions at individual level
+#----------------------------------
+ind_pred_inter <- expand.grid(daylength = as.numeric(3:max(dat$daylength,na.rm=T)),
+                              id = unique(dat$id))
+
+# add group_to_compare column
+ind_pred <- ind_pred_inter %>%
+  # set as data.table
+  setDT(.) %>% 
+  # sort by group_to_compare, time and id
+  .[order(daylength, id),] %>%
+  # add individual prediction
+  .[, fit_ind := predict.gam(m,
+                             .SD,
+                             type = "response")] %>%
+  # add individual SE
+  .[, se_ind := predict.gam(m,
+                            .SD,
+                            se.fit=TRUE,
+                            type = "response")$se.fit] %>%
+  # sort by group_to_compare, time and id
+  .[order(daylength, id),] %>%
+  # trick to avoid calling twice this object in the console for display
+  .[]
+
+
+#----------------------------------
+# predictions at population level
+#----------------------------------
+pop_pred <- setDT(
+  expand.grid(
+    daylength = as.numeric(3:max(dat$daylength,na.rm=T)),
+    id = "population_level",
+    stringsAsFactors = FALSE
+  )
+) %>%
+  # sort by group_to_compare, time and id
+  .[order(daylength, id),] %>%
+  # retrieve population prediction
+  .[, fit_pop := predict.gam(m,
+                             # select the best individual by group_to_compare
+                             ind_pred[, .SD[id == "22849b"]],#first(id)
+                             type = "response",
+                             exclude = c("s(id)",
+                                         "s(daylength,id)"))] %>%
+  # add standard error at the population level
+  .[, fit_pop_se := predict.gam(
+    m,
+    # select the first individual by group_to_compare
+    ind_pred[, .SD[id == "22849b"]],
+    type = "response",
+    exclude = c("s(id)",
+                "s(daylength,id)"),
+    se.fit = T
+  )$se.fit] %>%
+  # trick to avoid calling twice this object in the console for display
+  .[]
+pop_pred = as_tibble(pop_pred)
+```
+
+* Ok trend similar to the one using mean depth.
+```{r, echo=FALSE, fig.pos="placeHere", fig.height=5.5, fig.cap="Individual and population smooth curves using daily mean of mean_dep."}
+ggplot(pop_pred, aes(x = daylength, y = fit_pop)) +
+  geom_ribbon(aes(ymin=fit_pop-fit_pop_se,ymax=fit_pop+fit_pop_se),
+              alpha=0.3, fill="mediumseagreen") +
+  geom_line(colour="mediumseagreen",lwd=1) +
+  geom_line(data=ind_pred, aes(daylength, fit_ind, group=id), 
+            colour="mediumseagreen", lwd=0.5, alpha=0.4) +
+  ylim(0,130) +
+  labs(y = "Daily mean of mean_depth (m)", x = "Daylength (hours)") +
+  theme_tq()
+```
