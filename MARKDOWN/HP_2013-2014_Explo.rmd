@@ -1,0 +1,1009 @@
+---
+title: "HP 2013-2014: Explo Dive data (HR dataset, n=5)"
+author: "Philippine Chambault"
+date: "2022-08-23"
+output:
+  bookdown::html_document2:
+    number_sections: yes
+    code_folding: show
+    df_print: default
+    fig_caption: yes
+    toc: yes
+    toc_float:
+      collapsed: yes
+      smooth_scroll: no
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(
+  echo      = TRUE,
+  fig.align = "center",
+  message = FALSE,
+  warning = FALSE,
+  # cache   = FALSE,
+  out.width = "100%"
+  # comment = NA
+)
+```
+
+__Background__:
+High-resolution harbour porpoises data (dive data sampling rate: 1 sec from MK10 tags, plus low resolution Argos locations) collected from five individuals instrumented from 2013 to 2014 in Maniitsoq, West Greenland.
+Prey items found in HP West Greenland (Maniitsoq, Nuuk and Paamiut) according to Heide-Jorgensen et al 2011: Atlantic cod was detected in 31% and Greenland cod in 19% of the stomachs. Also: Mallotus villosus (Capelin, 78%), Boregadus saida (Atlantic cod, 53%), Gadidae (cods family, 59%), squid beaks or eyes (70%).
+
+
+```{r, global_options, include=FALSE}
+library(ggplot2)
+library(tidyquant)
+library(gridExtra)
+library(tidyverse)
+library(dplyr)
+library(viridis)
+library(DT)
+library(data.table)
+# Sys.setlocale("LC_TIME", "English")
+```
+
+
+# Import data {.tabset}
+
+## Dive data
+
+```{r, echo=F}
+setwd("/Users/philippinechambault/Documents/POST-DOC/2021/MSCA-GF/ANALYSES/HP")
+hp  <- readRDS("./RDATA/1b.dive_5HP_calib_5m_zoc0.RDS") %>%
+  select(id,posix_local,period,hour,depth,date) %>%
+  mutate(month =  substr(date, 6, 7))
+DT::datatable(hp[1:10,],options=list(scrollX=T))
+
+# number of records per id
+table(hp$id)
+```
+
+
+
+## Locations data
+
+```{r, echo=F}
+setwd("/Users/philippinechambault/Documents/POST-DOC/2021/MSCA-GF/ANALYSES/HP")
+loc  <- readRDS("./RDATA/1.locations_filtered_5HP.RDS")
+DT::datatable(loc[1:10,-c(2:4,8:9,12)],options=list(scrollX=T))
+
+# number of records per id
+table(loc$id)
+
+# summary for each id
+loc %>%
+  group_by(id) %>%
+  summarise(start    = first(posix),
+            end      = last(posix),
+            duration = difftime(last(posix), first(posix), units="days"),
+            nlocs    = n()) %>%
+  print(n=5)
+```
+
+
+
+# Tag duration (dive dataset) {.tabset}
+
+```{r, echo=F}
+hp %>%
+  group_by(id) %>%
+  summarise(nobs       = n(),
+            start      = first(posix_local),
+            end        = last(posix_local),
+            dur_days   = difftime(last(posix_local), 
+                                  first(posix_local), units="days"),
+            dur_months = floor(as.numeric(difftime(last(posix_local), 
+                                                   first(posix_local), units="days")/30))) %>%
+  print(n=5)
+
+# Summarize data per id: extract daily max depth
+maxdep_daily = dat %>%
+  dplyr::group_by(id) %>%
+  dplyr::mutate(day = as.numeric(date - first(date)) + 1) %>%
+  dplyr::group_by(id, date) %>%
+  dplyr::summarise(maxdep    = max(depth, na.rm=T),
+            mindep    = min(depth, na.rm=T),
+            meandep   = mean(depth, na.rm=T),
+            mediandep = median(depth, na.rm=T)) %>%
+  dplyr::group_by(id) %>%
+  dplyr::mutate(day = as.numeric(date - first(date)) + 1,
+         month = substr(date, 6, 7)) %>%
+  dplyr::ungroup()
+```
+
+
+## In days
+```{r, echo=FALSE, fig.pos="placeHere", fig.height=4, fig.cap="Tracking duration (in days) per individual."}
+ggplot(maxdep_daily, aes(y=day, x=id, colour=id)) +
+  geom_line(size=2) + 
+  scale_y_continuous(name="Days", breaks=seq(0,max(maxdep_daily$day),by=10)) +
+  scale_color_tq() +
+  labs(x="", y="Tracking duration (days)") +
+  coord_flip() +
+  theme_tq() +
+  theme(legend.position="none")
+```
+
+## Year of deployment
+```{r, echo=FALSE, fig.pos="placeHere", fig.height=4, fig.cap="Tracking duration per individual according to year of deployment."}
+ggplot(maxdep_daily, aes(y=date, x=id, colour=id)) +
+  geom_line(size=2) + 
+  scale_color_tq() +
+  labs(x="", y="Year of deployment") +
+  coord_flip() +
+  theme_tq() +
+  theme(legend.position="none")
+```
+
+
+
+
+# Maps of tracks {.tabset}
+
+```{r, echo=F}
+north_map = map_data("world") %>% group_by(group)
+shore     = north_map[north_map$region=="Greenland"
+                      | north_map$region=="Norway"
+                      | north_map$region=="Sweden"
+                      | north_map$region=="Denmark"
+                      | north_map$region=="Finland"
+                      | north_map$region=="Iceland",]
+```
+
+## Individual maps
+```{r, echo=FALSE, fig.pos="placeHere", fig.height=4, fig.cap="Individual maps from locations dataset."}
+ggplot(shore, aes(long, lat)) +
+  geom_point(data=loc, aes(lon,lat,colour=as.factor(id)), size=0.1) +
+  coord_map("azequidistant", xlim=c(-60,-20), ylim=c(60,72)) +
+  geom_polygon(aes(group=group), fill="lightgrey",lwd=1) +
+  facet_wrap(~id, ncol=3) + 
+  labs(x="",y="") +
+  theme_tq() +
+  theme(legend.position = "none")
+```
+
+## Monthly maps
+```{r, echo=FALSE, fig.pos="placeHere", fig.height=4, fig.cap="Monthly maps from locations dataset."}
+ggplot(shore, aes(long, lat)) +
+  geom_point(data=loc, aes(lon,lat,colour=as.factor(month)), size=0.1) +
+  coord_map("azequidistant", xlim=c(-60,-20), ylim=c(60,72)) +
+  geom_polygon(aes(group=group), fill="lightgrey",lwd=1) +
+  facet_wrap(~month, ncol=3) + 
+  labs(x="",y="") +
+  theme_tq() +
+  theme(legend.position = "none")
+```
+There might be a seasonal pattern with the porpoises heading further south from September to the fall. Could also be a simple intra-specific variability (due to different sizes, stages).
+
+
+
+
+
+# Bathymetry at locations {.tabset}
+## Bathymetry over time
+```{r, echo=T}
+# Mean bathy at locations
+summary(loc$bathy)
+
+# bathy summary per ID
+loc %>%
+  group_by(id) %>%
+  summarise(mean_bathy = mean(bathy, na.rm=T),
+            sd_bathy   = sd(bathy, na.rm=T),
+            max_bathy  = max(bathy, na.rm=T))
+
+# summarize bathy daily per ID
+daily = loc %>%
+  group_by(id, date) %>%
+  summarise(mean_bathy = mean(bathy, na.rm=T))
+```
+
+```{r, echo=FALSE, fig.pos="placeHere", fig.height=4, fig.cap="Mean daily bathymetry (in m) at locations over time for the 5 porpoises."}
+ggplot(data = daily, aes(x=date, y=mean_bathy)) +
+  geom_bar(stat="identity") +
+  scale_y_continuous(trans = "reverse") +
+  labs(x = "", y = "Bathymetry at location (m)", 
+       title="Mean daily bathy") +
+  facet_wrap(~id, scales="free_x") +
+  theme_tq() +
+  theme(axis.title.y = element_text(size=10,color="black"),
+        axis.title.x = element_text(size=10,color="black"),
+        axis.text.x  = element_text(size=10,vjust=0.5,color="black"),
+        axis.text.y  = element_text(size=10,color="black"),
+        strip.text = element_text(colour='white',size=12,face="bold",
+                                  margin=margin(0.1,0.1,0.1,0.1,"cm")),
+        panel.background = element_blank(),
+        text=element_text(size=10, family="serif"),
+        panel.grid.major = element_line(colour="lightgrey", size=0.1),
+        plot.margin = unit(c(0.2,0.2,0.2,0.1), "cm"),
+        axis.line.x.top = element_line(size = 3, color = "red"))
+```
+The individuals globally experienced deep waters (mean: 147 m deep, up to 1561 deep). It is unknown if they would target the bottom, performing demersal dives or rather pelagic dives. One option would be to match the average daily locations to the dive dataset to get an approximation of the mean bathymetry per day, but the different sampling rates between both datasets (1 sec vs. several locs/day) would preclude the investigation of the benthic vs epelagic behaviour in detail.
+
+
+## Map of bathymetry at locations
+```{r, echo=FALSE, fig.pos="placeHere", fig.height=4, fig.cap="Map of bathymetry (in m) at locations."}
+ggplot(shore, aes(long, lat)) +
+  geom_point(data=loc, aes(lon,lat,colour=bathy), size=0.1) +
+  scico::scale_colour_scico(palette = "berlin", direction=1) + 
+  coord_map("azequidistant", xlim=c(-57,-40), ylim=c(60,70)) +
+  geom_polygon(aes(group=group), fill="lightgrey",lwd=1) +
+  facet_wrap(~id, ncol=3) + 
+  labs(x="",y="") +
+  theme_tq() +
+  theme(legend.position = "bottom")
+```
+  
+  
+  
+  
+
+
+# Dive depth {.tabset}
+
+## Histogram 
+```{r, echo=FALSE, fig.pos="placeHere", fig.height=3.5, fig.cap="Individual histograms of dive depth."}
+ggplot(data = hp, aes(x=depth, fill = id)) +
+  geom_bar(binwidth = 5, stat = "bin") +
+  coord_flip() +
+  scale_x_continuous(trans = "reverse") +
+  scale_fill_brewer(palette = "Set2") +
+  labs(y = "Counts", x = "Max depth (m)") +
+  facet_wrap(~id, ncol=5, scales="free_x") +
+  theme_tq() +
+  theme(axis.title.y = element_text(size=10,color="black"),
+        axis.title.x = element_text(size=10,color="black"),
+        axis.text.x  = element_text(size=8,vjust=0.5,color="black"),
+        axis.text.y  = element_text(size=10,color="black"),
+        legend.position = "none",
+        strip.text = element_text(colour='white',size=12,face="bold",
+                                  margin=margin(0.1,0.1,0.1,0.1,"cm")),
+        panel.background = element_blank(),
+        text=element_text(size=10, family="serif"),
+        panel.grid.major = element_line(colour="lightgrey", size=0.1),
+        plot.margin = unit(c(0.2,0.2,0.2,0.1), "cm"),
+        axis.line.x.top = element_line(size = 3, color = "red"))
+```
+The five porpoises performed mainly shallow dives within the first 30 meters, but occasionally conducted deep dives up to 360 m. 
+
+
+## Density
+```{r, echo=FALSE, fig.pos="placeHere", fig.height=3.5, fig.cap="Individuals density plots of dive depth."}
+ggplot(data = hp, aes(x=depth, fill=id, colour=id)) +
+  geom_density(aes(y=..scaled..,alpha=.4)) +
+  coord_flip() +
+  scale_x_continuous(trans = "reverse") +
+  scale_fill_brewer(palette = "Set2") +
+  scale_colour_brewer(palette = "Set2") +
+  labs(y = "Dive frequency", x = "Depth (m)") +
+  facet_wrap(~id, ncol=5) +
+  theme_tq() +
+  theme(axis.title.y = element_text(size=10,color="black"),
+        axis.title.x = element_text(size=10,color="black"),
+        axis.text.x  = element_text(size=8,vjust=0.5,color="black"),
+        axis.text.y  = element_text(size=10,color="black"),
+        strip.text = element_text(colour='white',size=12,face="bold",
+                                  margin=margin(0.1,0.1,0.1,0.1,"cm")),
+        panel.background = element_blank(),
+        legend.position = "none",
+        text=element_text(size=10, family="serif"),
+        panel.grid.major = element_line(colour="lightgrey", size=0.1),
+        plot.margin = unit(c(0.2,0.2,0.2,0.1), "cm"),
+        axis.line.x.top = element_line(size = 3, color = "red"))
+```
+The histograms show a unimodal distribution except for #27262, for which a bimodal distribution with a peak around 50 m can be seen.
+
+
+## Profile over time
+
+```{r, echo=FALSE, fig.pos="placeHere", fig.height=4, fig.cap="Individuals histograms of dive depth using daily max depth."}
+ggplot(data = maxdep_daily, aes(x=date, y=maxdep)) +
+  geom_bar(stat="identity") +
+  scale_y_continuous(trans = "reverse") +
+  labs(x = "", y = "Daily max depth (m)") +
+  facet_wrap(~id, scales="free_x") +
+  theme_tq() +
+  theme(axis.title.y = element_text(size=10,color="black"),
+        axis.title.x = element_text(size=10,color="black"),
+        axis.text.x  = element_text(size=10,vjust=0.5,color="black"),
+        axis.text.y  = element_text(size=10,color="black"),
+        strip.text = element_text(colour='white',size=12,face="bold",
+                                  margin=margin(0.1,0.1,0.1,0.1,"cm")),
+        panel.background = element_blank(),
+        text=element_text(size=10, family="serif"),
+        panel.grid.major = element_line(colour="lightgrey", size=0.1),
+        plot.margin = unit(c(0.2,0.2,0.2,0.1), "cm"),
+        axis.line.x.top = element_line(size = 3, color = "red"))
+```
+These histograms don't incorporate all the data for each individual, but rather show the daily maximum depth per individual. This plot highlights the deep dives, even though the majority of the dives (short ones) can be somehow masked on these plots. Should look at the proportion of deep dives per individual and per day.
+
+
+
+# Number of dives 
+
+```{r}
+# Depth definition: depth threshold=5 m, zoc=0
+ndive_summary <- readRDS("./RDATA/1c.diveSummary_5HP_calib_5m_zoc0.RDS")
+
+# number of dives per ID
+table(ndive_summary$id)
+
+# proportion of dives shorter than 1 min (might be underestimated due to the dive threshold of 5 m)
+nrow(ndive_summary[ndive_summary$dur<60,]) / nrow(ndive_summary) * 100
+ndive_summary %>%
+  group_by(id) %>%
+  summarise(tot_dives      = max(dive),
+            shorter_1min   = n_distinct(dive[dur<60]))  %>%
+  mutate(prop_shorter_1min = (shorter_1min / tot_dives) * 100)
+
+# proportion of dives below 25 m
+nrow(ndive_summary[ndive_summary$maxdep>25,]) / nrow(ndive_summary) * 100 
+ndive_summary %>%
+  group_by(id) %>%
+  summarise(tot_dives = max(dive),
+            ndives_below25m  = n_distinct(dive[maxdep>=25]))  %>%
+  mutate(prop_below25m = (ndives_below25m / tot_dives) * 100)
+
+# proportion of dives below 50 m
+nrow(ndive_summary[ndive_summary$maxdep>50,]) / nrow(ndive_summary) * 100 
+ndive_summary %>%
+  group_by(id) %>%
+  summarise(tot_dives = max(dive),
+            ndives_below50m  = n_distinct(dive[maxdep>=50]))  %>%
+  mutate(prop_below50m = (ndives_below50m / tot_dives) * 100)
+
+# proportion of dives below 100 m
+nrow(ndive_summary[ndive_summary$maxdep>100,]) / nrow(ndive_summary) * 100 
+ndive_summary %>%
+  group_by(id) %>%
+  summarise(tot_dives = max(dive),
+            ndives_below100m  = n_distinct(dive[maxdep>=100]))  %>%
+  mutate(prop_below100m = (ndives_below100m / tot_dives) * 100)
+
+# dive summary per ID
+ndive_summary %>% 
+  group_by(id) %>% 
+  summarise(mean_dep   = mean(maxdep), 
+            median_dep = median(maxdep),
+            mean_dur   = mean(dur/60),
+            median_dur = median(dur/60))
+```
+Maximum dives depths were on average between 34.8 and 62.5 m, and 44% of the dives were deeper than 25 m, while only 26% deeper than 50 m. Despite their small proportions, these deeper dives could play a critical role in harbour porpoises feeding ecology. Could these deep dives be related to hunting events instead?
+
+
+
+# Diel pattern {.tabset}
+
+```{r, echo=FALSE}
+maxdep_hourly = hp %>%
+  group_by(id, date, hour) %>%
+  summarise(period    = first(period),
+            maxdep    = max(depth, na.rm=T),
+            mindep    = min(depth, na.rm=T),
+            meandep   = mean(depth, na.rm=T),
+            mediandep = median(depth, na.rm=T))
+maxdep_hourly$hour  = as.factor(maxdep_hourly$hour)
+maxdep_hourly$month = as.factor(substr(maxdep_hourly$date,6,7))
+```
+
+
+## Max depth vs hours
+```{r, echo=FALSE, fig.pos="placeHere", fig.height=5, fig.cap="Individual smooth curves of the max dive depth according to the hour of the day."}
+ggplot(maxdep_hourly, aes(y = maxdep, x = as.numeric(hour), colour = id)) +
+  geom_smooth(method="gam", lwd = 0.5) +
+  scale_y_continuous(trans = "reverse") +
+  ylim(365, 0) +
+  facet_grid(id~month) +
+  labs(x="Hour", y="Daily max depth (m)", 
+       axis.text  = element_text(size=7, hjust=0.5),
+       title ="Diel pattern from max depth (daily)", fill="") +
+  theme_tq() +
+  theme(legend.position = "none",
+        axis.text  = element_text(size=7, hjust=0.5),
+        strip.text = element_text(colour='white',size=10,
+                                  margin=margin(0.1,0.1,0.1,0.1,"cm")))
+```
+Based on the maximum daily depth, dives appear to be shallower in the morning (around 8-11 am), as indicated by shallower dives for 4 over 5 individuals. Deeper dives are observed mid-late afternoon (3-6 pm). The same plot should including the entire dataset to avoid bias information based on daily max depth.
+
+
+## Dive duration
+```{r, echo=FALSE, fig.pos="placeHere", fig.height=5, fig.cap="Individual histograms of the dive duration according to the phase of the day."}
+ggplot(data = ndive_summary, aes(x=dur/60, fill=period, colour=period)) +
+  geom_density(aes(y=..scaled..,alpha=.4)) +
+  labs(y = "Dive probability", x = "(min)", 
+       title = "Dive duration",fill="") +
+  scale_fill_brewer(palette = "Set2") +
+  scale_colour_brewer(palette = "Set2") +
+  theme_tq() +
+  facet_grid(id~period) +
+  theme(legend.position = "none",
+        axis.text  = element_text(size=7, hjust=0.5),
+        strip.text = element_text(colour='white',size=10,
+                                  margin=margin(0.1,0.1,0.1,0.1,"cm")))
+```
+Bimodal distributions during dawn, dusk and night for nearly all porpoises, with dives shorter than 1 min and dives longer than 1-2 min. Dives appear to be globally shorter during the day.
+
+
+## Max depth
+```{r, echo=FALSE, fig.pos="placeHere", fig.height=5, fig.cap="Individual histograms of the maximum dive depth according to the phase of the day."}
+ggplot(data = ndive_summary, aes(x=maxdep, fill=period, colour=period)) +
+  geom_density(aes(y=..scaled..,alpha=.4)) +
+  coord_flip() +
+  scale_x_continuous(trans = "reverse") +
+  labs(y = "Dive probability", x = "(m)", 
+       title = "Dive depth",fill="") +
+  scale_fill_brewer(palette = "Set2") +
+  scale_colour_brewer(palette = "Set2") +
+  theme_tq() +
+  facet_grid(id~period) +
+  theme(legend.position = "none",
+        axis.text  = element_text(size=7, hjust=0.5),
+        strip.text = element_text(colour='white',size=10,
+                                  margin=margin(0.1,0.1,0.1,0.1,"cm")))
+```
+Shallower dives during daytime while bimodality during dusk and dawn.
+
+## Descent rate
+```{r, echo=FALSE, fig.pos="placeHere", fig.height=5, fig.cap="Individual histograms of the descent rate according to the phase of the day."}
+ggplot(data = ndive_summary, aes(x=des_rate, fill=period, colour=period)) +
+  geom_density(aes(y=..scaled..,alpha=.4)) +
+  labs(y = "Dive probability", x = "(m/s)", 
+       title = "Descent rate",fill="") +
+  scale_fill_brewer(palette = "Set2") +
+  scale_colour_brewer(palette = "Set2") +
+  theme_tq() +
+  facet_grid(id~period) +
+  theme(legend.position = "none",
+        axis.text  = element_text(size=7, hjust=0.5),
+        strip.text = element_text(colour='white',size=10,
+                                  margin=margin(0.1,0.1,0.1,0.1,"cm")))
+```
+
+## Ascent rate
+```{r, echo=FALSE, fig.pos="placeHere", fig.height=5, fig.cap="Individuals histograms of the ascent rate according to the phase of the day."}
+ggplot(data = ndive_summary, aes(x=asc_rate, fill=period, colour=period)) +
+  geom_density(aes(y=..scaled..,alpha=.4)) +
+  labs(y = "Dive probability", x = "(m/s)", 
+       title = "Ascent rate",fill="") +
+  scale_fill_brewer(palette = "Set2") +
+  scale_colour_brewer(palette = "Set2") +
+  theme_tq() +
+  facet_grid(id~period) +
+  theme(legend.position = "none",
+        axis.text  = element_text(size=7, hjust=0.5),
+        strip.text = element_text(colour='white',size=10,
+                                  margin=margin(0.1,0.1,0.1,0.1,"cm")))
+```
+Ascent rate globally higher (faster) than descent rate.
+
+## Bottom duration
+```{r, echo=FALSE, fig.pos="placeHere", fig.height=5, fig.cap="Individuals histograms of the bottom duration according to the phase of the day."}
+ggplot(data = ndive_summary, aes(x=bot_dur, fill=period, colour=period)) +
+  geom_density(aes(y=..scaled..,alpha=.4)) +
+  labs(y = "Dive probability", x = "(sec)", 
+       title = "Bottom duration",fill="") +
+  scale_fill_brewer(palette = "Set2") +
+  scale_colour_brewer(palette = "Set2") +
+  facet_grid(id~period) +
+  theme_tq() +
+  xlim(0,100) +
+  theme(legend.position = "none",
+        axis.text  = element_text(size=7, hjust=0.5),
+        strip.text = element_text(colour='white',size=10,
+                                  margin=margin(0.1,0.1,0.1,0.1,"cm")))
+```
+
+
+##  All hourly max depth
+```{r, echo=FALSE, fig.pos="placeHere", fig.height=5, fig.cap="Individuals density plots of the hourly max depth according to the time of the day."}
+ggplot(maxdep_hourly, aes(x=maxdep, fill = period, colour = period)) +
+  geom_density(aes(y=..scaled..,alpha=.4)) +
+  coord_flip() +
+  scale_x_continuous(trans = "reverse") +
+  scale_fill_brewer(palette = "Set2") +
+  scale_colour_brewer(palette = "Set2") +
+  facet_grid(period~month) +
+  labs(y="Dive density", x="Daily max depth (m)", 
+       title ="Diel pattern from max depth (hourly)", fill="") +
+  theme_tq() +
+  theme(legend.position = "none",
+        axis.text  = element_text(size=7, hjust=0.5),
+        strip.text = element_text(colour='white',size=10,
+                                  margin=margin(0.1,0.1,0.1,0.1,"cm")))
+```
+When looking at hourly maximum depth, there is a clear diel pattern in the diving behaviour, with shallower dives during daytime while deeper dives (peak around 150 m) during dawn, dusk and night.
+
+## Individual plots hourly
+```{r, echo=FALSE, fig.pos="placeHere", fig.height=5, fig.cap="Individuals density plots of the hourly max depth according to the phase of the day."}
+ggplot(maxdep_hourly, aes(x=maxdep, fill = period, colour = period)) +
+  geom_density(aes(y=..scaled..,alpha=.4)) +
+  coord_flip() +
+  scale_x_continuous(trans = "reverse") +
+  scale_fill_brewer(palette = "Set2") +
+  scale_colour_brewer(palette = "Set2") +
+  facet_grid(id~period) +
+  labs(y="Dive density", x="Daily max depth (m)", 
+       title ="Diel pattern from max depth (hourly)", fill="") +
+  theme_tq() +
+  theme(legend.position = "none",
+        axis.text  = element_text(size=7, hjust=0.5),
+        strip.text = element_text(colour='white',size=10,
+                                  margin=margin(0.1,0.1,0.1,0.1,"cm")))
+```
+
+
+
+
+
+
+
+# Relationship between max depth and duration {.tabset}
+
+## All ids
+```{r, echo=FALSE, fig.pos="placeHere", fig.height=3.5, fig.cap="Relationship between max depth and dive duration for all individuals."}
+ggplot(data = ndive_summary, aes(x=dur/60, y=maxdep)) +
+  geom_point(aes(colour=id), size=0.1, alpha=1/40, show.legend = F) +
+  scale_colour_brewer(palette = "Set2") +
+  geom_smooth(method="gam", aes(colour=id), 
+              lwd=0.5, se=F, show.legend = T) +
+  scale_fill_brewer(palette = "Set2") +
+  scale_y_continuous(trans = "reverse") +
+  labs(y = "Max depth (m)", x = "Duration (min)", fill="") +
+  theme_tq() +
+  theme(legend.position = "right",
+        axis.text  = element_text(size=7, hjust=0.5),
+        strip.text = element_text(colour='white',size=10,
+                                  margin=margin(0.1,0.1,0.1,0.1,"cm")))
+```
+There is an obvious and unsurprising relationship between max depth and dive duration for all individuals.
+
+## Individual plots
+```{r, echo=FALSE, fig.pos="placeHere", fig.height=4, fig.cap="Individual relationships between max depth dand dive duration."}
+ggplot(data = ndive_summary, aes(x=dur/60, y=maxdep,
+                                 fill=id, colour=id)) +
+  geom_point(aes(colour=id), size=0.1, alpha=1/40, show.legend = F) +
+  scale_colour_brewer(palette = "Set2") +
+  geom_smooth(method="gam", colour="black", lwd=0.5, se=F) +
+  scale_fill_brewer(palette = "Set2") +
+  scale_y_continuous(trans = "reverse") +
+  labs(y = "Max depth (m)", x = "Duration (min)", fill="") +
+  theme_tq() +
+  facet_grid(~id) +
+  theme(legend.position = "none",
+        axis.text  = element_text(size=7, hjust=0.5),
+        strip.text = element_text(colour='white',size=10,
+                                  margin=margin(0.1,0.1,0.1,0.1,"cm")))
+```
+For all porpoises but #93100, the slope becomes steeper beyond 40 m, meaning that the dive duration will increase less rapidly after a certain depth (approx. 40 m), suggesting the porpoises might reach their ADL. Should look at the relationship between dive duration and post-dive surface interval to investigate that.
+
+## Different periods
+```{r, echo=FALSE, fig.pos="placeHere", fig.height=4, fig.cap="Relationship between max depth and dive duration for all individuals and different periods."}
+ggplot(data = ndive_summary, aes(x=dur/60, y=maxdep)) +
+  geom_point(aes(colour=period), size=0.1, alpha=1/40, show.legend = F) +
+  scale_colour_brewer(palette = "Set2") +
+  geom_smooth(method="gam", colour="black", lwd=0.5, se=F) +
+  scale_fill_brewer(palette = "Set2") +
+  scale_y_continuous(trans = "reverse") +
+  labs(y = "Max depth (m)", x = "Duration (min)", fill="") +
+  theme_tq() +
+  facet_grid(~period) +
+  theme(legend.position = "none",
+        axis.text  = element_text(size=7, hjust=0.5),
+        strip.text = element_text(colour='white',size=10,
+                                  margin=margin(0.1,0.1,0.1,0.1,"cm")))
+```
+Slope less steep during daytime.
+
+## Individual plots different periods
+```{r, echo=FALSE, fig.pos="placeHere", fig.height=5, fig.cap="Individual relationships between max depth dand dive duration."}
+ggplot(data = ndive_summary, aes(x=dur/60, y=maxdep,
+                                 fill=period, colour=period)) +
+  geom_point(aes(colour=period), size=0.1, alpha=1/40, show.legend = F) +
+  scale_colour_brewer(palette = "Set2") +
+  geom_smooth(method="gam", colour="black", lwd=0.5, se=F) +
+  scale_fill_brewer(palette = "Set2") +
+  scale_y_continuous(trans = "reverse") +
+  labs(y = "Max depth (m)", x = "Duration (min)", fill="") +
+  theme_tq() +
+  facet_grid(id~period) +
+  theme(legend.position = "none",
+        axis.text  = element_text(size=7, hjust=0.5),
+        strip.text = element_text(colour='white',size=10,
+                                  margin=margin(0.1,0.1,0.1,0.1,"cm")))
+```
+
+
+
+
+
+
+
+# Density plots of max depth vs dive duration {.tabset}
+
+## All dives
+```{r, echo=FALSE, fig.pos="placeHere", fig.height=3.5, fig.cap="Individual density plots of the max depth vs duration for all dives recorded."}
+ggplot(ndive_summary, aes(y = -maxdep, x = dur/60)) +
+  geom_density_2d_filled(contour_var = "ndensity", 
+                         bins = 8) + 
+  scale_fill_brewer(palette = 3, direction = 1) + # 3,9,12
+  facet_wrap(vars(id), ncol=5) +
+  labs(x = "Dive duration (min)", y = "Dive depth (m)",
+       title = "All dives", fill="n dives \nprobability") +
+  theme_tq() +
+  theme(panel.spacing = unit(0, "lines"),
+        panel.border = element_rect(color = "white", fill = NA, size = 0.2), 
+        strip.text = element_text(colour='white',size=10,
+                                  margin=margin(0.1,0.1,0.1,0.1,"cm")),
+        axis.title = element_text(size=8, hjust=0.5),
+        legend.position = "bottom",
+        legend.key.size = unit(0.4,"line"),
+        legend.key.width = unit(0.2,"cm"),
+        legend.key.height = unit(0.2,"cm"),
+        legend.title = element_text(size=6),
+        legend.text = element_text(size=5),
+        legend.box.spacing = unit(0.1,'cm'),
+        legend.margin=margin(t=-0.0, unit='cm'),
+        legend.key = element_blank(),
+        axis.text  = element_text(size=7, hjust=0.5),
+        title = element_text(colour="black",size=10,face="bold"),
+        plot.title=element_text(size=10, vjust=0, hjust=0, colour="black"),
+        panel.background = element_blank(),
+        panel.grid.major = element_blank(),
+        plot.margin = unit(c(0.2,0.2,0.5,0.2),"cm"))  # t, r, b, l
+```
+Except for #27262, most of dives concentrated in shallower waters above 50 m.
+
+## Below 25 m
+```{r, echo=F}
+deep_dives = ndive_summary %>% filter(maxdep>=25)
+```
+
+```{r, echo=FALSE, fig.pos="placeHere", fig.height=3.5, fig.cap="Individual density plots of the max depth vs duration for dives below 25 m."}
+ggplot(deep_dives, aes(y = -maxdep, x = dur/60)) +
+  geom_density_2d_filled(contour_var = "ndensity", bins = 8) + 
+  scale_fill_brewer(palette = 3, direction = 1) + # 3,9,12
+  facet_wrap(vars(id), ncol=5) +
+  labs(x = "Dive duration (min)", y = "Dive depth (m)",
+       title = "Dives below 25 m", fill="n dives \nprobability") +
+  theme_tq() +
+  ylim(-365, 0) +
+  theme(panel.spacing = unit(0, "lines"),
+        panel.border = element_rect(color = "white", fill = NA, size = 0.2), 
+        strip.text = element_text(colour='white',size=10,face="bold",
+                                  margin=margin(0.1,0.1,0.1,0.1,"cm")),
+        axis.title = element_text(size=8, hjust=0.5),
+        legend.position = "bottom",
+        legend.key.size = unit(0.4,"line"),
+        legend.key.width = unit(0.2,"cm"),
+        legend.key.height = unit(0.2,"cm"),
+        legend.title = element_text(size=6),
+        legend.text = element_text(size=5),
+        legend.box.spacing = unit(0.1,'cm'),
+        legend.margin=margin(t=-0.0, unit='cm'),
+        legend.key = element_blank(),
+        axis.text  = element_text(size=7, hjust=0.5),
+        title = element_text(colour="black",size=10,face="bold"),
+        plot.title=element_text(size=10, vjust=0, hjust=0, colour="black"),
+        panel.background = element_blank(),
+        panel.grid.major = element_blank(),
+        plot.margin = unit(c(0.2,0.2,0.5,0.2),"cm"))  # t, r, b, l
+```
+When looking at dives below 25 m, it seems all dives are still concentrated in the epipelagic layer (around 30 m), with some excursions below 100 m.
+
+
+## Below 50 m
+```{r, echo=F}
+deep_dives = ndive_summary %>% filter(maxdep>=50)
+```
+
+```{r, echo=FALSE, fig.pos="placeHere", fig.height=3.5, fig.cap="Individual density plots of the max depth vs duration for dives below 50 m."}
+ggplot(deep_dives, aes(y = -maxdep, x = dur/60)) +
+  geom_density_2d_filled(contour_var = "ndensity", bins = 8) + 
+  scale_fill_brewer(palette = 3, direction = 1) + # 3,9,12
+  facet_wrap(vars(id), ncol=5) +
+  labs(x = "Dive duration (min)", y = "Dive depth (m)",
+       title = "Dives below 50 m", fill="n dives \nprobability") +
+  theme_tq() +
+  ylim(-365, 0) +
+  theme(panel.spacing = unit(0, "lines"),
+        panel.border = element_rect(color = "white", fill = NA, size = 0.2), 
+        # strip.background = element_rect(fill="steelblue4",size=0.2,
+        #                                 colour="white"),
+        strip.text = element_text(colour='white',size=10,face="bold",
+                                  margin=margin(0.1,0.1,0.1,0.1,"cm")),
+        axis.title = element_text(size=8, hjust=0.5),
+        legend.position = "bottom",
+        legend.key.size = unit(0.4,"line"),
+        legend.key.width = unit(0.2,"cm"),
+        legend.key.height = unit(0.2,"cm"),
+        legend.title = element_text(size=6),
+        legend.text = element_text(size=5),
+        legend.box.spacing = unit(0.1,'cm'),
+        legend.margin=margin(t=-0.0, unit='cm'),
+        legend.key = element_blank(),
+        axis.text  = element_text(size=7, hjust=0.5),
+        title = element_text(colour="black",size=10,face="bold"),
+        plot.title=element_text(size=10, vjust=0, hjust=0, colour="black"),
+        panel.background = element_blank(),
+        panel.grid.major = element_blank(),
+        plot.margin = unit(c(0.2,0.2,0.5,0.2),"cm"))  # t, r, b, l
+```
+
+
+
+
+## Different periods
+
+```{r, echo=FALSE, fig.pos="placeHere", fig.height=3.5, fig.cap="Individual density plots of the max depth vs duration for all dives recorded at different times of the day."}
+ggplot(ndive_summary, aes(y = -maxdep, x = dur/60)) +
+  geom_density_2d_filled(contour_var = "ndensity", bins = 8) + 
+  facet_wrap(vars(period), ncol=5) +
+  scale_fill_brewer(palette = 3, direction = 1) + # 3,9,12
+  ylim(-365, 0) +
+  labs(x = "Dive duration (min)", y = "Dive depth (m)",
+       title = "All dives (different times of the day)", fill="n dives \nprobability") +
+  theme_tq() +
+  theme(panel.spacing = unit(0, "lines"),
+        panel.border = element_rect(color = "white", fill = NA, size = 0.2), 
+        strip.text = element_text(colour='white',size=10,
+                                  margin=margin(0.1,0.1,0.1,0.1,"cm")),
+        axis.title = element_text(size=8, hjust=0.5),
+        legend.position = "bottom",
+        legend.key.size = unit(0.4,"line"),
+        legend.key.width = unit(0.2,"cm"),
+        legend.key.height = unit(0.2,"cm"),
+        legend.title = element_text(size=6),
+        legend.text = element_text(size=5),
+        legend.box.spacing = unit(0.1,'cm'),
+        legend.margin=margin(t=-0.0, unit='cm'),
+        legend.key = element_blank(),
+        axis.text  = element_text(size=7, hjust=0.5),
+        title = element_text(colour="black",size=10,face="bold"),
+        plot.title=element_text(size=10, vjust=0, hjust=0, colour="black"),
+        panel.background = element_blank(),
+        panel.grid.major = element_blank(),
+        plot.margin = unit(c(0.2,0.2,0.5,0.2),"cm"))  # t, r, b, l
+```
+Dives occurring during dawn and dusk seem to be deeper and longer compared to daytime, but the majority of the dives during such periods is still concentrated in shallow layers.
+
+## Dives at dusk
+```{r, echo=F}
+subset = ndive_summary %>% filter(period == "dusk")
+```
+
+```{r, echo=FALSE, fig.pos="placeHere", fig.height=3.5, fig.cap="Individual density plots of the max depth vs duration for dives at dusk."}
+ggplot(subset, aes(y = -maxdep, x = dur/60)) +
+  geom_density_2d_filled(contour_var = "ndensity", bins = 8) + 
+  scale_fill_brewer(palette = 3, direction = 1) + # 3,9,12
+  facet_wrap(vars(id), ncol=5) +
+  labs(x = "Dive duration (min)", y = "Dive depth (m)",
+       title = "Dives at dusk", fill="n dives \nprobability") +
+  theme_tq() +
+  ylim(-365, 0) +
+  theme(panel.spacing = unit(0, "lines"),
+        panel.border = element_rect(color = "white", fill = NA, size = 0.2), 
+        strip.text = element_text(colour='white',size=10,face="bold",
+                                  margin=margin(0.1,0.1,0.1,0.1,"cm")),
+        axis.title = element_text(size=8, hjust=0.5),
+        legend.position = "bottom",
+        legend.key.size = unit(0.4,"line"),
+        legend.key.width = unit(0.2,"cm"),
+        legend.key.height = unit(0.2,"cm"),
+        legend.title = element_text(size=6),
+        legend.text = element_text(size=5),
+        legend.box.spacing = unit(0.1,'cm'),
+        legend.margin=margin(t=-0.0, unit='cm'),
+        legend.key = element_blank(),
+        axis.text  = element_text(size=7, hjust=0.5),
+        title = element_text(colour="black",size=10,face="bold"),
+        plot.title=element_text(size=10, vjust=0, hjust=0, colour="black"),
+        panel.background = element_blank(),
+        panel.grid.major = element_blank(),
+        plot.margin = unit(c(0.2,0.2,0.5,0.2),"cm"))  # t, r, b, l
+```
+
+
+
+## Dives during the day
+```{r, echo=F}
+subset = ndive_summary %>% filter(period == "day")
+```
+
+```{r, echo=FALSE, fig.pos="placeHere", fig.height=3.5, fig.cap="Individual density plots of the max depth vs duration for dives during daytime."}
+ggplot(subset, aes(y = -maxdep, x = dur/60)) +
+  geom_density_2d_filled(contour_var = "ndensity", bins = 8) + 
+  scale_fill_brewer(palette = 3, direction = 1) + # 3,9,12
+  facet_wrap(vars(id), ncol=5) +
+  labs(x = "Dive duration (min)", y = "Dive depth (m)",
+       title = "Dives during the day", fill="n dives \nprobability") +
+  theme_tq() +
+  ylim(-365, 0) +
+  theme(panel.spacing = unit(0, "lines"),
+        panel.border = element_rect(color = "white", fill = NA, size = 0.2), 
+        strip.text = element_text(colour='white',size=10,face="bold",
+                                  margin=margin(0.1,0.1,0.1,0.1,"cm")),
+        axis.title = element_text(size=8, hjust=0.5),
+        legend.position = "bottom",
+        legend.key.size = unit(0.4,"line"),
+        legend.key.width = unit(0.2,"cm"),
+        legend.key.height = unit(0.2,"cm"),
+        legend.title = element_text(size=6),
+        legend.text = element_text(size=5),
+        legend.box.spacing = unit(0.1,'cm'),
+        legend.margin=margin(t=-0.0, unit='cm'),
+        legend.key = element_blank(),
+        axis.text  = element_text(size=7, hjust=0.5),
+        title = element_text(colour="black",size=10,face="bold"),
+        plot.title=element_text(size=10, vjust=0, hjust=0, colour="black"),
+        panel.background = element_blank(),
+        panel.grid.major = element_blank(),
+        plot.margin = unit(c(0.2,0.2,0.5,0.2),"cm"))  # t, r, b, l
+```
+
+
+
+
+## Dives at dawn
+```{r, echo=F}
+subset = ndive_summary %>% filter(period == "dawn")
+```
+
+```{r, echo=FALSE, fig.pos="placeHere", fig.height=3.5, fig.cap="Individual density plots of the max depth vs duration for dives during dawn"}
+ggplot(subset, aes(y = -maxdep, x = dur/60)) +
+  geom_density_2d_filled(contour_var = "ndensity", bins = 8) + 
+  scale_fill_brewer(palette = 3, direction = 1) + # 3,9,12
+  facet_wrap(vars(id), ncol=5) +
+  labs(x = "Dive duration (min)", y = "Dive depth (m)",
+       title = "Dives at dawn", fill="n dives \nprobability") +
+  theme_tq() +
+  ylim(-365, 0) +
+  theme(panel.spacing = unit(0, "lines"),
+        panel.border = element_rect(color = "white", fill = NA, size = 0.2), 
+        strip.text = element_text(colour='white',size=10,face="bold",
+                                  margin=margin(0.1,0.1,0.1,0.1,"cm")),
+        axis.title = element_text(size=8, hjust=0.5),
+        legend.position = "bottom",
+        legend.key.size = unit(0.4,"line"),
+        legend.key.width = unit(0.2,"cm"),
+        legend.key.height = unit(0.2,"cm"),
+        legend.title = element_text(size=6),
+        legend.text = element_text(size=5),
+        legend.box.spacing = unit(0.1,'cm'),
+        legend.margin=margin(t=-0.0, unit='cm'),
+        legend.key = element_blank(),
+        axis.text  = element_text(size=7, hjust=0.5),
+        title = element_text(colour="black",size=10,face="bold"),
+        plot.title=element_text(size=10, vjust=0, hjust=0, colour="black"),
+        panel.background = element_blank(),
+        panel.grid.major = element_blank(),
+        plot.margin = unit(c(0.2,0.2,0.5,0.2),"cm"))  # t, r, b, l
+```
+
+
+## Dives at night
+```{r, echo=F}
+subset = ndive_summary %>% filter(period == "night")
+```
+
+```{r, echo=FALSE, fig.pos="placeHere", fig.height=3.5, fig.cap="Individual density plots of the max depth vs duration for dives during nighttime."}
+ggplot(subset, aes(y = -maxdep, x = dur/60)) +
+  geom_density_2d_filled(contour_var = "ndensity", bins = 8) + 
+  scale_fill_brewer(palette = 3, direction = 1) + # 3,9,12
+  facet_wrap(vars(id), ncol=5) +
+  labs(x = "Dive duration (min)", y = "Dive depth (m)",
+       title = "Dives at night", fill="n dives \nprobability") +
+  theme_tq() +
+  ylim(-365, 0) +
+  theme(panel.spacing = unit(0, "lines"),
+        panel.border = element_rect(color = "white", fill = NA, size = 0.2), 
+        strip.text = element_text(colour='white',size=10,face="bold",
+                                  margin=margin(0.1,0.1,0.1,0.1,"cm")),
+        axis.title = element_text(size=8, hjust=0.5),
+        legend.position = "bottom",
+        legend.key.size = unit(0.4,"line"),
+        legend.key.width = unit(0.2,"cm"),
+        legend.key.height = unit(0.2,"cm"),
+        legend.title = element_text(size=6),
+        legend.text = element_text(size=5),
+        legend.box.spacing = unit(0.1,'cm'),
+        legend.margin=margin(t=-0.0, unit='cm'),
+        legend.key = element_blank(),
+        axis.text  = element_text(size=7, hjust=0.5),
+        title = element_text(colour="black",size=10,face="bold"),
+        plot.title=element_text(size=10, vjust=0, hjust=0, colour="black"),
+        panel.background = element_blank(),
+        panel.grid.major = element_blank(),
+        plot.margin = unit(c(0.2,0.2,0.5,0.2),"cm"))  # t, r, b, l
+```
+
+
+## Below 50 m different periods
+```{r, echo=F}
+deep_dives = ndive_summary %>% filter(maxdep>=50)
+```
+
+```{r, echo=FALSE, fig.pos="placeHere", fig.height=3.5, fig.cap="Individual density plots of the max depth vs duration for dives below 50 m at different times of the day."}
+ggplot(deep_dives, aes(y = -maxdep, x = dur/60)) +
+  geom_density_2d_filled(contour_var = "ndensity", bins = 8) + 
+  scale_fill_brewer(palette = 3, direction = 1) + # 3,9,12
+  facet_wrap(vars(period), ncol=5) +
+  ylim(-365, 0) +
+  labs(x = "Dive duration (min)", y = "Dive depth (m)",
+       title = "All dives (different times of the day)", fill="n dives \nprobability") +
+  theme_tq() +
+  theme(panel.spacing = unit(0, "lines"),
+        panel.border = element_rect(color = "white", fill = NA, size = 0.2), 
+        strip.text = element_text(colour='white',size=10,
+                                  margin=margin(0.1,0.1,0.1,0.1,"cm")),
+        axis.title = element_text(size=8, hjust=0.5),
+        legend.position = "bottom",
+        legend.key.size = unit(0.4,"line"),
+        legend.key.width = unit(0.2,"cm"),
+        legend.key.height = unit(0.2,"cm"),
+        legend.title = element_text(size=6),
+        legend.text = element_text(size=5),
+        legend.box.spacing = unit(0.1,'cm'),
+        legend.margin=margin(t=-0.0, unit='cm'),
+        legend.key = element_blank(),
+        axis.text  = element_text(size=7, hjust=0.5),
+        title = element_text(colour="black",size=10,face="bold"),
+        plot.title=element_text(size=10, vjust=0, hjust=0, colour="black"),
+        panel.background = element_blank(),
+        panel.grid.major = element_blank(),
+        plot.margin = unit(c(0.2,0.2,0.5,0.2),"cm"))  # t, r, b, l
+```
+
+
+
+
+
+
+
+# Seasonal pattern {.tabset}
+
+```{r, echo=F}
+maxdep_daily$month = factor(maxdep_daily$month, levels=c("07","08","09",
+                                                         "10","11",
+                                                         "12","01"))
+```
+
+
+## All ids
+```{r, echo=FALSE, fig.pos="placeHere", fig.height=3, fig.cap="Boxplot of the maximum daily depth across months."}
+ggplot(maxdep_daily, aes(x=month, y=maxdep, fill=month)) +
+  geom_boxplot() +
+  scale_y_continuous(trans = "reverse") +
+  scale_fill_brewer(palette = "Set2") +
+  # facet_grid(.~id) +
+  labs(y="Max depth (m)", x="Months", 
+       title ="Seasonal pattern from max depth (daily)", fill="") +
+  theme_tq() +
+  theme(legend.position = "none",
+        axis.text  = element_text(size=7, hjust=0.5),
+        strip.text = element_text(colour='white',size=10,
+                                  margin=margin(0.1,0.1,0.1,0.1,"cm")))
+```
+It seems there is an increasing pattern in terms of max dive depth across months, but it could be related to several factors such as the location of the animal and therefore the bathymetry at such location. Alternatively, could be a real pattern of the porpoises diving deeper during colder months, possibly in relation to the deeper mixed layer depth in winter and its impact of the availability of the prey.
+
+## Individual plots
+```{r, echo=FALSE, fig.pos="placeHere", fig.height=2.5, fig.cap="Individual boxplot of the maximum daily depth across months."}
+ggplot(maxdep_daily, aes(x=month, y=maxdep, fill=month)) +
+  geom_boxplot() +
+  scale_y_continuous(trans = "reverse") +
+  scale_fill_brewer(palette = "Set2") +
+  facet_wrap(.~id, ncol=5) +
+  labs(y="Max depth (m)", x="Months", 
+       title ="Seasonal pattern from max depth (daily)", fill="") +
+  theme_tq() +
+  theme(legend.position = "none",
+        axis.text  = element_text(size=7, hjust=0.5),
+        strip.text = element_text(colour='white',size=10,
+                                  margin=margin(0.1,0.1,0.1,0.1,"cm")))
+```
+
+
+
+
+<!-- # Bathymetry in relation to max dive depth -->
+
